@@ -36,11 +36,11 @@ This setup is ideal for creating a dedicated, full-screen Home Assistant web kio
 
 2. **Make the script executable:**
    ```bash
-   chmod +x ha-chromium-kiosk/ha-chromium-kiosk-setup.sh
+   chmod +x ha-chromium-kiosk-setup.sh
    ```
 3. **Run the script using** sudo **with** install **or** uninstall **option**:
    ```bash
-   sudo ./ha-chromium-kiosk/ha-chromium-kiosk-setup.sh install
+   sudo ./ha-chromium-kiosk-setup.sh install
    ```
    ***To Install:***
    Installation will prompt you to:
