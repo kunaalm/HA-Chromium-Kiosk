@@ -249,7 +249,7 @@ uninstall_kiosk() {
     read -p "Do you want to remove the installed packages (xorg, openbox, chromium, etc.)? (y/n): " remove_packages
     if [[ $remove_packages == "y" || $remove_packages == "Y" ]]; then
         echo "Removing installed packages..."
-        apt purge -y xorg openbox chromium xserver-xorg xinit unclutter netcat curl
+        apt purge -y xorg openbox chromium xserver-xorg xinit unclutter curl
         apt autoremove -y
     fi
 
