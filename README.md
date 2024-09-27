@@ -29,9 +29,9 @@ This setup is ideal for creating a dedicated, full-screen Home Assistant web kio
 
 ## Usage
 
-1. **Clone this repository:**
+1. **Download the script:**
    ```bash
-   git clone https://github.com/kunaalm/ha-chromium-kiosk.git
+   wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/main/ha-chromium-kiosk-setup.sh
    ```
 
 2. **Make the script executable:**
