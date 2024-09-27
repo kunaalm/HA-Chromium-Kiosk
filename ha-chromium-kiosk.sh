@@ -2,11 +2,11 @@
 # -----------------------------------------------------------------------------
 # Author: Kunaal Mahanti
 # License: Apache License, Version 2.0
-# URL: https://github.com/kunaalm/light-chromium-kiosk
+# URL: https://github.com/kunaalm/ha-chromium-kiosk
 #
 # This script sets up a light Chromium-based kiosk mode on a Debian server
-# without using a display manager. It configures a touch-friendly kiosk
-# environment and provides options for hiding the mouse pointer.
+# specifically for Home Assistant dashboards, without using a display manager.
+# It configures a touch-friendly kiosk environment and provides options for hiding the mouse pointer.
 #
 # DISCLAIMER:
 # This script is provided "as is," without warranty of any kind, express or
@@ -27,36 +27,50 @@
 # limitations under the License.
 # -----------------------------------------------------------------------------
 
-# Display the disclaimer
-echo "-------------------------------------------------------------"
+# Print disclaimer
 echo "DISCLAIMER:"
-echo "This script is provided 'as is,' without warranty of any kind."
-echo "By using this script, you assume all risks. This script is"
-echo "intended for educational and personal use only and is not"
-echo "recommended for commercial deployments."
-echo "-------------------------------------------------------------"
-read -p "Do you wish to proceed? (y/n): " proceed
-if [[ $proceed != "y" && $proceed != "Y" ]]; then
-    echo "Exiting the script. No changes have been made."
-    exit 1
-fi
+echo "This script is provided 'as is,' without warranty of any kind, express or implied."
+echo "By using this script, you assume all risks. It is intended for educational and personal use only."
+echo "This script is not recommended for commercial deployments."
+echo "Press Ctrl+C to cancel if you do not agree with these terms."
+sleep 10  # Pause for 10 seconds to give the user a chance to cancel
 
 # Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root using sudo"
-    exit
-fi
-
-# Check if URL is provided
-if [ -z "$1" ]; then
-    echo "Usage: sudo $0 <URL>"
+    echo "Please run as root using sudo."
     exit 1
 fi
 
-KIOSK_URL=$1
+# Prompt user for the IP address of their Home Assistant instance
+read -p "Enter the IP address of your Home Assistant instance: " HA_IP
+if [[ -z "$HA_IP" ]]; then
+    echo "The IP address is required. Please run the script again."
+    exit 1
+fi
+
+# Ask for the Home Assistant port, defaulting to 8123
+read -p "Enter the port for Home Assistant [default: 8123]: " HA_PORT
+HA_PORT=${HA_PORT:-8123}
+
+# Ask for the path to the Home Assistant dashboard, defaulting to lovelace/default_view
+read -p "Enter the path to your Home Assistant dashboard [default: lovelace/default_view]: " HA_DASHBOARD_PATH
+HA_DASHBOARD_PATH=${HA_DASHBOARD_PATH:-lovelace/default_view}
+
+# Prompt to use kiosk mode
+read -p "Do you want to enable kiosk mode? (y/n): " enable_kiosk
+if [[ $enable_kiosk == "y" || $enable_kiosk == "Y" ]]; then
+    KIOSK_MODE="?kiosk=true"
+else
+    KIOSK_MODE=""
+fi
+
+# Construct the full URL for the Home Assistant dashboard
+KIOSK_URL="http://$HA_IP:$HA_PORT/$HA_DASHBOARD_PATH$KIOSK_MODE"
+echo "Your Home Assistant dashboard will be displayed at: $KIOSK_URL"
+
 KIOSK_USER="kiosk"
 
-echo "Setting up Chromium Kiosk Mode for URL: $KIOSK_URL"
+echo "Setting up Chromium Kiosk Mode for Home Assistant URL: $KIOSK_URL"
 
 # Step 1: Update and upgrade the system
 echo "Updating and upgrading the system..."
@@ -89,7 +103,7 @@ sudo -u $KIOSK_USER mkdir -p /home/$KIOSK_USER/.config/openbox
 
 # Step 6: Create the kiosk startup script
 echo "Creating the kiosk startup script..."
-cat <<EOF >/usr/local/bin/light-chromium-kiosk.sh
+cat <<EOF >/usr/local/bin/ha-chromium-kiosk.sh
 #!/bin/bash
 
 # Disable screen blanking
@@ -103,15 +117,15 @@ EOF
 # Prompt the user about hiding the cursor
 read -p "Do you want to hide the mouse cursor? (y/n): " hide_cursor
 if [[ $hide_cursor == "y" || $hide_cursor == "Y" ]]; then
-    echo "unclutter -idle 0 &" >>/usr/local/bin/light-chromium-kiosk.sh
+    echo "unclutter -idle 0 &" >>/usr/local/bin/ha-chromium-kiosk.sh
 fi
 
-cat <<EOF >>/usr/local/bin/light-chromium-kiosk.sh
+cat <<EOF >>/usr/local/bin/ha-chromium-kiosk.sh
 
 # Function to check network connectivity and service availability
 check_network() {
     while true; do
-        if nc -z -w 5 192.168.1.1 80; then
+        if nc -z -w 5 $HA_IP $HA_PORT; then
             break
         else
             sleep 2
@@ -138,18 +152,18 @@ while true; do
 done
 EOF
 
-chmod +x /usr/local/bin/light-chromium-kiosk.sh
+chmod +x /usr/local/bin/ha-chromium-kiosk.sh
 
 # Step 7: Configure Openbox to start the kiosk script
 echo "Configuring Openbox to start the kiosk script..."
-echo "/usr/local/bin/light-chromium-kiosk.sh &" >/home/$KIOSK_USER/.config/openbox/autostart
+echo "/usr/local/bin/ha-chromium-kiosk.sh &" >/home/$KIOSK_USER/.config/openbox/autostart
 chown -R $KIOSK_USER:$KIOSK_USER /home/$KIOSK_USER/.config
 
 # Step 8: Create the systemd service for the kiosk
 echo "Creating the systemd service..."
-cat <<EOF >/etc/systemd/system/light-chromium-kiosk.service
+cat <<EOF >/etc/systemd/system/ha-chromium-kiosk.service
 [Unit]
-Description=Chromium Kiosk Mode
+Description=Chromium Kiosk Mode for Home Assistant
 After=systemd-user-sessions.service network-online.target
 Wants=network-online.target
 
@@ -173,7 +187,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable light-chromium-kiosk.service
+systemctl enable ha-chromium-kiosk.service
 
 # Step 9: Add kiosk user to the tty group
 echo "Adding the kiosk user to the tty group..."
