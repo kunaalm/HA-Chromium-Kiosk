@@ -8,7 +8,7 @@ GitHub: [https://github.com/kunaalm/ha-chromium-kiosk](https://github.com/kunaal
 
 ## Summary
 
-The `ha-chromium-kiosk.sh` script performs the following tasks:
+The `ha-chromium-kiosk-setup.sh` script performs the following tasks:
 - Updates and upgrades the Debian system packages.
 - Creates a dedicated `kiosk` user for the kiosk environment.
 - Installs necessary packages, including X server, Chromium, Openbox, and utilities.
@@ -36,19 +36,25 @@ This setup is ideal for creating a dedicated, full-screen Home Assistant web kio
 
 2. **Make the script executable:**
    ```bash
-   chmod +x ha-chromium-kiosk/ha-chromium-kiosk.sh
+   chmod +x ha-chromium-kiosk/ha-chromium-kiosk-setup.sh
    ```
-3. **Run the script using** ***sudo***:
+3. **Run the script using** sudo **with** install **or** uninstall **option**:
    ```bash
-   sudo ./ha-chromium-kiosk/ha-chromium-kiosk.sh
+   sudo ./ha-chromium-kiosk/ha-chromium-kiosk-setup.sh install
    ```
-The script will prompt you to:
+   ***To Install:***
+   Installation will prompt you to:
    * Enter the IP address of your Home Assistant instance (required)
    * Confirm the port for Home Assistant (defaults to 8123)
    * Enter the path to your Home Assistant dashboard (defaults to lovelace/default_view)
    * Choose whether to enable kiosk mode (?kiosk=true will be added to the URL if enabled)
 
-4.	**Reboot the System:**
+   ***To Uninstall:***
+   ```bash
+   sudo ./ha-chromium-kiosk/ha-chromium-kiosk-setup.sh uninstall
+   ```
+
+5.	**Reboot the System:**
 After the script completes, you will be prompted to reboot. You can either reboot immediately or do so manually later to activate the kiosk environment.
 
 ### Important Information
