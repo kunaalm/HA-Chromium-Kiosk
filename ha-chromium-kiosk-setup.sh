@@ -90,7 +90,7 @@ install_kiosk() {
 
     # Step 3: Install necessary packages
     echo "Installing required packages..."
-    apt install -y xorg openbox chromium xserver-xorg xinit unclutter netcat curl
+    apt install -y xorg openbox chromium xserver-xorg xinit unclutter curl
 
     # Step 4: Set up auto login for the kiosk user
     echo "Configuring auto-login for the kiosk user..."
