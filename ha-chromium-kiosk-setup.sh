@@ -143,21 +143,17 @@ check_network() {
 
 check_network
 
-# Start Chromium in a loop to ensure it restarts if it crashes
-while true; do
-    chromium \
-        --noerrdialogs \
-        --disable-infobars \
-        --kiosk \
-        --incognito \
-        --disable-session-crashed-bubble \
-        --disable-features=TranslateUI \
-        --overscroll-history-navigation=0 \
-        --pull-to-refresh=2 \
-        "$KIOSK_URL" &
-    wait \$!
-    sleep 2
-done
+# Start Chromium
+chromium \
+    --noerrdialogs \
+    --disable-infobars \
+    --kiosk \
+    --incognito \
+    --disable-session-crashed-bubble \
+    --disable-features=TranslateUI \
+    --overscroll-history-navigation=0 \
+    --pull-to-refresh=2 \
+    "$KIOSK_URL"
 EOF
 
     chmod +x /usr/local/bin/ha-chromium-kiosk.sh
