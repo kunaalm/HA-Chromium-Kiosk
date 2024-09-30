@@ -1,18 +1,12 @@
 #!/bin/bash
 # -----------------------------------------------------------------------------
 # HA Chromium Kiosk Setup and Uninstall Script
-# Author: Kunaal Mahanti
+# Author: Kunaal Mahanti (kunaal.mahanti@gmail.com)
 # URL: https://github.com/kunaalm/ha-chromium-kiosk
 #
 # This script installs or uninstalls a light Chromium-based kiosk mode on a
 # Debian server specifically for Home Assistant dashboards, without using
 # a display manager.
-#
-# DISCLAIMER:
-# This script is provided "as is," without warranty of any kind, express or
-# implied. By using this script, you assume all risks. This script is intended
-# for educational and personal use only and is not recommended for commercial
-# deployments.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,24 +16,150 @@
 #
 # -----------------------------------------------------------------------------
 
+## GLOBAL VARIABLES
+KIOSK_USER="kiosk"
+CONFIG_DIR="/home/$KIOSK_USER/.config"
+KIOSK_CONFIG_DIR="$CONFIG_DIR/ha-chromium-kiosk"
+OPENBOX_CONFIG_DIR="$CONFIG_DIR/openbox"
+
+DEFAULT_HA_PORT="8123"
+DEFAULT_HA_DASHBOARD_PATH="lovelace/default_view"
+
+PKGS_NEEDED=(xorg openbox chromium xserver-xorg xinit unclutter curl)
+
+## FUNCTIONS
 # Print usage
 print_usage() {
-    echo "Usage: sudo $0 [install|uninstall]"
+    echo "Usage: sudo $0 {install|uninstall}"
     exit 1
 }
 
-# Check if script is run with sudo
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root using sudo."
-    exit 1
-fi
+# Install the necessary packages
+install_packages() {
+    # Create the kiosk configuration directory
+    mkdir -p "$KIOSK_CONFIG_DIR"
+    
+    # Install the necessary packages and keep track of what was installed 
+    missing_pkgs=()
 
-# Check if argument is provided
-if [ -z "$1" ]; then
-    print_usage
-fi
+    echo "Checking required packages..."
 
-# INSTALL FUNCTIONALITY
+    # Create a list of packages that need to be checked
+    pkgs_list="${PKGS_NEEDED[*]}"
+
+    # Get the install status of all required packages at once
+    dpkg_query_output=$(dpkg-query -W -f='${Package} ${Status}\n' $pkgs_list 2>/dev/null)
+
+    for pkg in "${PKGS_NEEDED[@]}"; do
+        if ! echo "$dpkg_query_output" | grep -q "^$pkg install ok installed$"; then
+            missing_pkgs+=("$pkg")
+        fi
+    done
+
+    if [ ${#missing_pkgs[@]} -ne 0 ]; then
+        echo "The following packages are missing and will be installed: ${missing_pkgs[*]}"
+        if ! apt install -y "${missing_pkgs[@]}"; then
+            echo "Failed to install the required packages. Exiting..."
+            exit 1
+        fi
+    else
+        echo "All prerequisites are already installed."
+    fi
+
+    # Save the list of packages to remove later in a file
+    echo "${missing_pkgs[*]}" > "$KIOSK_CONFIG_DIR/installed-packages"
+}
+
+# Uninstall the installed packages
+uninstall_packages() {
+    # Check if the installed-packages file exists
+    if [ -f "$KIOSK_CONFIG_DIR/installed-packages" ]; then
+        installed_packages=$(< "$KIOSK_CONFIG_DIR/installed-packages")
+        
+        if [ -n "$installed_packages" ]; then
+            echo "Removing installed packages..."
+            
+            # Uninstall the packages and handle errors
+            if ! apt-get purge -y $installed_packages; then
+                echo "Failed to purge some of the installed packages."
+                exit 1
+            fi
+
+            if ! apt-get autoremove -y; then
+                echo "Failed to autoremove some unnecessary packages."
+                exit 1
+            fi
+            
+            echo "Packages removed successfully."
+        else
+            echo "No packages to remove."
+        fi
+    else
+        echo "No installed packages file found."
+    fi
+}
+
+# Check and create user
+check_create_user() {
+    if id "$KIOSK_USER" &>/dev/null; then
+        # wait until user input to use existing user or create a new one, default to use existing
+        while true; do
+            read -p "The kiosk user already exists. Do you want to use the existing user? (Y/n): " use_existing
+            if [[ $use_existing =~ ^[YyNn]?$ ]]; then
+                use_existing=${use_existing:-y}
+                break
+            fi
+        done
+
+        # if user does not want to use existing user, ask for a new username
+        if [[ $use_existing =~ ^[nN]$ ]]; then
+            read -p "Enter a different username for the kiosk user: " KIOSK_USER
+            if id "$KIOSK_USER" &>/dev/null; then
+                echo "The user already exists. Please remove the user before running the script."
+                exit 1
+            fi
+        fi
+    fi 
+
+    echo "Creating the kiosk user..."
+    if ! adduser --disabled-password --gecos "" "$KIOSK_USER"; then
+        echo "Failed to create the kiosk user. Exiting..."
+        exit 1
+    fi
+}
+
+check_remove_user() {
+    if id "$KIOSK_USER" &>/dev/null; then
+        read -p "The kiosk user exists. Do you want to remove the user? (Y/n): " remove_user
+        if [[ $remove_user =~ ^[Yy]$ ]]; then
+            echo "Removing the kiosk user..."
+            userdel -r "$KIOSK_USER"
+        else
+            echo "The kiosk user was not removed."
+        fi
+    else
+        echo "The kiosk user does not exist."
+    fi
+}
+
+# Prompt user function
+prompt_user() {
+    local var_name=$1
+    local prompt_message=$2
+    local default_value=$3
+    
+    read -p "$prompt_message [$default_value]: " value
+    value=${value:-$default_value}
+    
+    if [[ -z "$value" && -z "$default_value" ]]; then
+        echo "Error: $var_name is required. Please run the script again."
+        exit 1
+    fi
+    
+    eval $var_name=\$value
+}
+
+# Install the kiosk setup
 install_kiosk() {
     # Print disclaimer
     echo "DISCLAIMER:"
@@ -47,66 +167,25 @@ install_kiosk() {
     echo "By using this script, you assume all risks. It is intended for educational and personal use only."
     echo "This script is not recommended for commercial deployments."
     echo "Press Ctrl+C to cancel if you do not agree with these terms."
-    sleep 10  # Pause for 10 seconds to give the user a chance to cancel
+    sleep 5
 
-    # Prompt user for the IP address of their Home Assistant instance
-    read -p "Enter the IP address of your Home Assistant instance: " HA_IP
-    if [[ -z "$HA_IP" ]]; then
-        echo "The IP address is required. Please run the script again."
-        exit 1
-    fi
+    # Prompt user for necessary inputs
+    prompt_user HA_IP "Enter the IP address of your Home Assistant instance" ""
+    prompt_user HA_PORT "Enter the port for Home Assistant" "8123"
+    prompt_user HA_DASHBOARD_PATH "Enter the path to your Home Assistant dashboard" "lovelace/default_view"
 
-    # Ask for the Home Assistant port, defaulting to 8123
-    read -p "Enter the port for Home Assistant [default: 8123]: " HA_PORT
-    HA_PORT=${HA_PORT:-8123}
+    # Kiosk mode and cursor settings
+    prompt_user enable_kiosk "Do you want to enable kiosk mode? (Y/n)" "Y"
+    prompt_user hide_cursor "Do you want to hide the mouse cursor? (Y/n)" "Y"
 
-    # Ask for the path to the Home Assistant dashboard, defaulting to lovelace/default_view
-    read -p "Enter the path to your Home Assistant dashboard [default: lovelace/default_view]: " HA_DASHBOARD_PATH
-    HA_DASHBOARD_PATH=${HA_DASHBOARD_PATH:-lovelace/default_view}
+    KIOSK_MODE=""
+    [[ $enable_kiosk == "y" || $enable_kiosk == "Y" ]] && KIOSK_MODE="?kiosk=true"
 
-    # Prompt to use kiosk mode
-    read -p "Do you want to enable kiosk mode? (y/n): " enable_kiosk
-    if [[ $enable_kiosk == "y" || $enable_kiosk == "Y" ]]; then
-        KIOSK_MODE="?kiosk=true"
-    else
-        KIOSK_MODE=""
-    fi
-
-    # Construct the full URL for the Home Assistant dashboard
     KIOSK_URL="http://$HA_IP:$HA_PORT/$HA_DASHBOARD_PATH$KIOSK_MODE"
     echo "Your Home Assistant dashboard will be displayed at: $KIOSK_URL"
+    echo "Setting up Chromium Kiosk Mode for Home Assistant URL:$KIOSK_URL"
 
-    KIOSK_USER="kiosk"
-
-    echo "Setting up Chromium Kiosk Mode for Home Assistant URL: $KIOSK_URL"
-
-    # Step 1: Update and upgrade the system
-    echo "Updating and upgrading the system..."
-    apt update && apt upgrade -y
-
-    # Step 2: Create the kiosk user
-    echo "Creating the kiosk user..."
-    adduser --disabled-password --gecos "" $KIOSK_USER
-
-    # Step 3: Install necessary packages
-    prerequisites=(xorg openbox chromium xserver-xorg xinit unclutter curl)
-    missing_pkgs=()
-
-    echo "Checking required packages..."
-    for pkg in "${prerequisites[@]}"; do
-        if ! dpkg -l | grep -q "$pkg"; then
-            missing_pkgs+=("$pkg")
-        fi
-    done
-
-    if [ ${#missing_pkgs[@]} -ne 0 ]; then
-        echo "The following packages are missing and will be installed: ${missing_pkgs[@]}"
-        apt install -y "${missing_pkgs[@]}"
-    else
-        echo "All prerequisites are already installed."
-    fi
-
-    # Step 4: Set up auto login for the kiosk user
+    # Configure auto login
     echo "Configuring auto-login for the kiosk user..."
     mkdir -p /etc/systemd/system/getty@tty1.service.d
     cat <<EOF >/etc/systemd/system/getty@tty1.service.d/override.conf
@@ -119,11 +198,11 @@ EOF
     systemctl daemon-reload
     systemctl restart getty@tty1.service
 
-    # Step 5: Configure Openbox
+    # Configure Openbox
     echo "Configuring Openbox for the kiosk user..."
-    sudo -u $KIOSK_USER mkdir -p /home/$KIOSK_USER/.config/openbox
+    sudo -u $KIOSK_USER mkdir -p $OPENBOX_CONFIG_DIR
 
-    # Step 6: Create the kiosk startup script
+    # Create the kiosk startup script
     echo "Creating the kiosk startup script..."
     cat <<EOF >/usr/local/bin/ha-chromium-kiosk.sh
 #!/bin/bash
@@ -136,33 +215,24 @@ xset s noblank
 # Optionally hide the mouse cursor
 EOF
 
-    # Prompt the user about hiding the cursor
-    read -p "Do you want to hide the mouse cursor? (y/n): " hide_cursor
-    if [[ $hide_cursor == "y" || $hide_cursor == "Y" ]]; then
-        echo "unclutter -idle 0 &" >>/usr/local/bin/ha-chromium-kiosk.sh
-    fi
+    [[ $hide_cursor == "y" || $hide_cursor == "Y" ]] && echo "unclutter -idle 0 &" >>/usr/local/bin/ha-chromium-kiosk.sh
 
     cat <<EOF >>/usr/local/bin/ha-chromium-kiosk.sh
 
-# Function to check network connectivity and service availability
 check_network() {
-    while true; do
-        if nc -z -w 5 $HA_IP $HA_PORT; then
-            break
-        else
-            sleep 2
-        fi
+    while ! nc -z -w 5 $HA_IP $HA_PORT; do
+        echo "Checking if Home Assistant is reachable..."
+        sleep 2
     done
 }
 
 check_network
+echo "Home Assistant is reachable. Starting Chromium..."
 
-# Start Chromium
 chromium \
     --noerrdialogs \
     --disable-infobars \
     --kiosk \
-    --incognito \
     --disable-session-crashed-bubble \
     --disable-features=TranslateUI \
     --overscroll-history-navigation=0 \
@@ -172,12 +242,10 @@ EOF
 
     chmod +x /usr/local/bin/ha-chromium-kiosk.sh
 
-    # Step 7: Configure Openbox to start the kiosk script
     echo "Configuring Openbox to start the kiosk script..."
-    echo "/usr/local/bin/ha-chromium-kiosk.sh &" >/home/$KIOSK_USER/.config/openbox/autostart
-    chown -R $KIOSK_USER:$KIOSK_USER /home/$KIOSK_USER/.config
+    echo "/usr/local/bin/ha-chromium-kiosk.sh &" > $OPENBOX_CONFIG_DIR/autostart
 
-    # Step 8: Create the systemd service for the kiosk
+    # Create the systemd service
     echo "Creating the systemd service..."
     cat <<EOF >/etc/systemd/system/ha-chromium-kiosk.service
 [Unit]
@@ -207,33 +275,32 @@ EOF
     systemctl daemon-reload
     systemctl enable ha-chromium-kiosk.service
 
-    # Step 9: Add kiosk user to the tty group
     echo "Adding the kiosk user to the tty group..."
     usermod -aG tty $KIOSK_USER
 
     # Prompt for immediate reboot
-    read -p "Setup is complete. Do you want to reboot now? (y/n): " reboot_now
-    if [[ $reboot_now == "y" || $reboot_now == "Y" ]]; then
-        echo "Rebooting the system..."
-        reboot
-    else
-        echo "Setup is complete. Please reboot the system manually when ready."
-    fi
+    prompt_user reboot_now "Setup is complete. Do you want to reboot now?" "n"
+    [[ $reboot_now == "y" || $reboot_now == "Y" ]] && { echo "Rebooting the system..."; reboot; } || echo "Setup is complete. Please reboot the system manually when ready."
 }
 
-# UNINSTALL FUNCTIONALITY
+# Uninstall the kiosk setup
 uninstall_kiosk() {
     echo "This script will uninstall HA Chromium Kiosk and remove all associated configurations."
-    read -p "Are you sure you want to proceed? (y/n): " confirm
-    if [[ $confirm != "y" && $confirm != "Y" ]]; then
+    prompt_user confirm "Are you sure you want to proceed? (Y/n)" "Y"
+    if [[ $confirm == "n" || $confirm == "N" ]]; then
         echo "Uninstall canceled."
         exit 0
     fi
 
     # Stop and disable the systemd service
     echo "Stopping and disabling the ha-chromium-kiosk service..."
-    systemctl stop ha-chromium-kiosk.service
-    systemctl disable ha-chromium-kiosk.service
+    systemctl stop ha-chromium-kiosk.service && systemctl disable ha-chromium-kiosk.service
+
+    # Check if the service was stopped and disabled successfully
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to stop or disable ha-chromium-kiosk service. Please check manually."
+        exit 1
+    fi
 
     # Remove the systemd service file
     echo "Removing the systemd service file..."
@@ -245,36 +312,70 @@ uninstall_kiosk() {
 
     # Remove the autostart entry for Openbox
     echo "Removing Openbox autostart configuration..."
-    rm -f /home/kiosk/.config/openbox/autostart
-
-    # Remove the kiosk user
-    echo "Removing the 'kiosk' user and home directory..."
-    userdel -r kiosk
+    if [[ -f $OPENBOX_CONFIG_DIR/autostart ]]; then
+        rm -f $OPENBOX_CONFIG_DIR/autostart
+    else
+        echo "No Openbox autostart configuration found."
+    fi
 
     # Reload systemd configuration
     echo "Reloading systemd configuration..."
     systemctl daemon-reload
 
     # Optionally remove installed packages
-    read -p "Do you want to remove the installed packages (xorg, openbox, chromium, etc.)? (y/n): " remove_packages
-    if [[ $remove_packages == "y" || $remove_packages == "Y" ]]; then
-        echo "Removing installed packages..."
-        apt purge -y xorg openbox chromium xserver-xorg xinit unclutter curl
-        apt autoremove -y
+    if [[ -f "$KIOSK_CONFIG_DIR/installed-packages" ]]; then
+        installed_packages=$(< "$KIOSK_CONFIG_DIR/installed-packages")
+        echo "The following packages were installed:"
+        echo "$installed_packages"
+        
+        prompt_user remove_packages "Do you want to remove the installed packages? (Y/n)" "Y"
+        
+        if [[ $remove_packages == "y" || $remove_packages == "Y" ]]; then
+            echo "Removing installed packages..."
+            apt-get remove --purge -y $installed_packages
+            
+            # Check if packages were removed successfully
+            if [[ $? -ne 0 ]]; then
+                echo "Failed to remove some packages. Please check manually."
+            else
+                echo "Packages removed successfully."
+            fi
+        else
+            echo "Installed packages were not removed."
+        fi
+    else
+        echo "No installed packages list found."
     fi
 
     echo "Uninstallation complete. The HA Chromium Kiosk setup has been removed."
 }
 
+## SCRIPT STARTS HERE
+# Check if script is run with sudo
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root using sudo."
+    exit 1
+fi
+
+# Check if argument is provided
+if [ -z "$1" ]; then
+    print_usage
+fi
+
 # Main script logic to handle install or uninstall
 case "$1" in
     install)
+        install_packages
+        check_create_user
         install_kiosk
         ;;
     uninstall)
         uninstall_kiosk
+        check_remove_user
+        uninstall_packages
         ;;
     *)
         print_usage
         ;;
 esac
+
