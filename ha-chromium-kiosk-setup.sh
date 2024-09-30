@@ -89,8 +89,22 @@ install_kiosk() {
     adduser --disabled-password --gecos "" $KIOSK_USER
 
     # Step 3: Install necessary packages
-    echo "Installing required packages..."
-    apt install -y xorg openbox chromium xserver-xorg xinit unclutter curl
+    prerequisites=(xorg openbox chromium xserver-xorg xinit unclutter curl)
+    missing_pkgs=()
+
+    echo "Checking required packages..."
+    for pkg in "${prerequisites[@]}"; do
+        if ! dpkg -l | grep -q "$pkg"; then
+            missing_pkgs+=("$pkg")
+        fi
+    done
+
+    if [ ${#missing_pkgs[@]} -ne 0 ]; then
+        echo "The following packages are missing and will be installed: ${missing_pkgs[@]}"
+        apt install -y "${missing_pkgs[@]}"
+    else
+        echo "All prerequisites are already installed."
+    fi
 
     # Step 4: Set up auto login for the kiosk user
     echo "Configuring auto-login for the kiosk user..."
