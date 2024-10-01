@@ -46,11 +46,61 @@ print_usage() {
     exit 1
 }
 
+# Print banner
+print_banner() {
+    echo "****************************************************************************************************"
+    echo "    __  _____       ________                         _                    __ __ _            __   "
+    echo "   / / / /   |     / ____/ /_  _________  ____ ___  (_)_  ______ ___     / //_/(_)___  _____/ /__ "
+    echo "  / /_/ / /| |    / /   / __ \/ ___/ __ \/ __ \`__ \/ / / / / __ \`__ \   / ,<  / / __ \/ ___/ //_/ "
+    echo " / __  / ___ |   / /___/ / / / /  / /_/ / / / / / / / /_/ / / / / / /  / /| |/ / /_/ (__  ) ,<    "
+    echo "/_/ /_/_/  |_|   \____/_/ /_/_/   \____/_/ /_/ /_/_/\__,_/_/ /_/ /_/  /_/ |_/_/\____/____/_/|_|   "
+    echo "                                                                                                  "
+    echo "                                                                                                 "
+    echo "                        Setup and Install or Uninstall Script for HA Chromium Kiosk              "
+    echo "                                                                                                 "
+    echo "****************************************************************************************************"
+    echo "***                               WARNING: USE AT YOUR OWN RISK                                  ***"
+    echo "****************************************************************************************************"
+    echo "                                                                                                 "
+    echo "* This script will install or uninstall HA Chromium Kiosk setup."
+    echo "* Please read the script before running it to understand what it does."
+    echo "* Use at your own risk. The author is not responsible for any damage or data loss."
+    echo "* Press Ctrl+C to exit or any other key to continue."
+    read -n 1 -s
+}
+
+install_package() {
+    package=$1  # Corrected assignment syntax
+
+    # Start a background job to print dots
+    while true; do
+        echo -n "..."
+        sleep 1
+    done &
+
+    # Capture the PID of the background job
+    DOT_PID=$!
+
+    # Run apt-get update and install silently
+    sudo apt-get update > /dev/null 2>&1
+    sudo apt-get install -y "$package" > /dev/null 2>&1  # Quoting $package for safety
+    # Capture the exit status of the apt-get command
+    apt_status=$?
+
+    # Kill the background job
+    kill $DOT_PID
+
+    # Wait for the background job to completely terminate
+    wait $DOT_PID 2>/dev/null
+    # Return the exit status of the apt-get command
+    return $apt_status
+}
+
 # Install the necessary packages
 # Keep track of the installed packages for later removal
 install_packages() {
     # Create the kiosk configuration directory
-    mkdir -p "$KIOSK_CONFIG_DIR"
+    sudo -u $KIOSK_USER mkdir -p "$KIOSK_CONFIG_DIR"
     
     # Install the necessary packages and keep track of what was installed 
     missing_pkgs=()
@@ -70,11 +120,23 @@ install_packages() {
     done
 
     if [ ${#missing_pkgs[@]} -ne 0 ]; then
-        echo "The following packages are missing and will be installed: ${missing_pkgs[*]}"
-        if ! apt install -y "${missing_pkgs[@]}"; then
-            echo "Failed to install the required packages. Exiting..."
-            exit 1
-        fi
+        echo "Installing missing packages..."
+        total_pkgs=${#missing_pkgs[@]}
+        current_pkg=0
+
+        for pkg in "${missing_pkgs[@]}"; do
+            current_pkg=$((current_pkg + 1))
+            echo -ne "Installing package $current_pkg of $total_pkgs: $pkg "
+
+            if ! install_package "$pkg"; then
+                echo "Failed to install package: $pkg"
+                exit 1
+            fi
+
+            echo " Done."
+        done
+
+        echo "All missing packages have been installed."
     else
         echo "All prerequisites are already installed."
     fi
@@ -114,31 +176,37 @@ uninstall_packages() {
 
 # Check and create user
 check_create_user() {
-    if id "$KIOSK_USER" &>/dev/null; then
-        # wait until user input to use existing user or create a new one, default to use existing
-        while true; do
-            read -p "The kiosk user already exists. Do you want to use the existing user? (Y/n): " use_existing
-            if [[ $use_existing =~ ^[YyNn]?$ ]]; then
-                use_existing=${use_existing:-y}
-                break
-            fi
-        done
+    # Ensure KIOSK_USER is set
+    if [ -z "$KIOSK_USER" ]; then
+        echo "No username provided. Please set KIOSK_USER."
+        exit 1
+    fi
 
-        # if user does not want to use existing user, ask for a new username
-        if [[ $use_existing =~ ^[nN]$ ]]; then
+    while id "$KIOSK_USER" &>/dev/null; do
+        # Prompt to use existing user or create a new one, default to existing
+            read -p "The kiosk user already exists. Do you want to use the existing user? (Y/n): " use_existing
+        use_existing=${use_existing:-Y}
+
+        if [[ $use_existing =~ ^[Yy]$ ]]; then
+            echo "Using the existing user."
+            return
+        elif [[ $use_existing =~ ^[Nn]$ ]]; then
             read -p "Enter a different username for the kiosk user: " KIOSK_USER
-            if id "$KIOSK_USER" &>/dev/null; then
-                echo "The user already exists. Please remove the user before running the script."
-                exit 1
+            if [ -z "$KIOSK_USER" ]; then
+                echo "Username cannot be empty. Please enter a valid username."
             fi
+        else
+            echo "Invalid input. Please enter Y or N."
         fi
-    fi 
+    done
 
     echo "Creating the kiosk user..."
-    if ! adduser --disabled-password --gecos "" "$KIOSK_USER"; then
+    if ! adduser --disabled-password --gecos "" "$KIOSK_USER" 2>&1 >/dev/null; then
         echo "Failed to create the kiosk user. Exiting..."
         exit 1
     fi
+
+    echo " Done."
 }
 
 # Check and remove user if needed
@@ -147,7 +215,7 @@ check_remove_user() {
         read -p "The kiosk user exists. Do you want to remove the user? (Y/n): " remove_user
         if [[ $remove_user =~ ^[Yy]?$ ]]; then
             echo "Removing the kiosk user..."
-            userdel -r "$KIOSK_USER"
+            userdel -rf "$KIOSK_USER"
         else
             echo "The kiosk user was not removed."
         fi
@@ -175,14 +243,6 @@ prompt_user() {
 
 # Install the kiosk setup
 install_kiosk() {
-    # Print disclaimer
-    echo "DISCLAIMER:"
-    echo "This script is provided 'as is,' without warranty of any kind, express or implied."
-    echo "By using this script, you assume all risks. It is intended for educational and personal use only."
-    echo "This script is not recommended for commercial deployments."
-    echo "Press Ctrl+C to cancel if you do not agree with these terms."
-    sleep 5
-
     # Prompt user for necessary inputs
     prompt_user HA_IP "Enter the IP address of your Home Assistant instance" ""
     prompt_user HA_PORT "Enter the port for Home Assistant" "8123"
@@ -293,7 +353,7 @@ EOF
     usermod -aG tty $KIOSK_USER
 
     # Prompt for immediate reboot
-    prompt_user reboot_now "Setup is complete. Do you want to reboot now?" "n"
+    prompt_user reboot_now "Setup is complete. Do you want to reboot now?" "Y"
     [[ $reboot_now =~ ^[Yy]$ ]] && { echo "Rebooting the system..."; reboot; } || echo "Setup is complete. Please reboot the system manually when ready."
 }
 
@@ -367,9 +427,12 @@ uninstall_kiosk() {
 ## SCRIPT STARTS HERE
 # Check if script is run with sudo
 if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root using sudo."
+    echo "ERROR: This script needs to be run as root"
+    echo "Re-run with sudo $0"
     exit 1
 fi
+
+print_banner
 
 # Check if argument is provided
 if [ -z "$1" ]; then
