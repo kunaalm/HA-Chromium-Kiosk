@@ -69,6 +69,7 @@ print_banner() {
     read -n 1 -s
 }
 
+# Install a package and print dots while waiting
 install_package() {
     package=$1  # Corrected assignment syntax
 
@@ -84,6 +85,33 @@ install_package() {
     # Run apt-get update and install silently
     sudo apt-get update > /dev/null 2>&1
     sudo apt-get install -y "$package" > /dev/null 2>&1  # Quoting $package for safety
+    # Capture the exit status of the apt-get command
+    apt_status=$?
+
+    # Kill the background job
+    kill $DOT_PID
+
+    # Wait for the background job to completely terminate
+    wait $DOT_PID 2>/dev/null
+    # Return the exit status of the apt-get command
+    return $apt_status
+}
+
+# Uninstall the installed package and print dots while waiting
+uninstall_package() {
+    package=$1
+
+    # Start a background job to print dots
+    while true; do
+        echo -n "..."
+        sleep 1
+    done &
+
+    # Capture the PID of the background job
+    DOT_PID=$!
+
+    # Run apt-get remove silently
+    sudo apt-get remove --purge -y "$package" > /dev/null 2>&1
     # Capture the exit status of the apt-get command
     apt_status=$?
 
@@ -392,6 +420,14 @@ uninstall_kiosk() {
         echo "No Openbox autostart configuration found."
     fi
 
+    # Remove the auto-login configuration
+    echo "Removing auto-login configuration..."
+    if [[ -f /etc/systemd/system/getty@tty1.service.d/override.conf ]]; then
+        rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
+    else
+        echo "No auto-login configuration found."
+    fi
+
     # Reload systemd configuration
     echo "Reloading systemd configuration..."
     systemctl daemon-reload
@@ -406,14 +442,16 @@ uninstall_kiosk() {
         
         if [[ $remove_packages =~ ^[Yn]?$ ]]; then
             echo "Removing installed packages..."
-            apt-get remove --purge -y $installed_packages
-            
-            # Check if packages were removed successfully
-            if [[ $? -ne 0 ]]; then
-                echo "Failed to remove some packages. Please check manually."
-            else
-                echo "Packages removed successfully."
-            fi
+            for pkg in $installed_packages; do
+                uninstall_package "$pkg"
+                
+                # Check if package was removed successfully
+                if [[ $? -ne 0 ]]; then
+                    echo "Failed to remove package: $pkg. Please check manually."
+                else
+                    echo "Package $pkg removed successfully."
+                fi
+            done
         else
             echo "Installed packages were not removed."
         fi
