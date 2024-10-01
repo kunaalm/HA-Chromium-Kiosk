@@ -1,5 +1,5 @@
 #!/bin/bash
-# -----------------------------------------------------------------------------
+###################################################################################
 # HA Chromium Kiosk Setup and Uninstall Script
 # Author: Kunaal Mahanti (kunaal.mahanti@gmail.com)
 # URL: https://github.com/kunaalm/ha-chromium-kiosk
@@ -14,9 +14,20 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# -----------------------------------------------------------------------------
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Usage: sudo ./ha-chromium-kiosk-setup.sh {install|uninstall}
+#               install - Installs the kiosk setup
+#               uninstall - Uninstalls the kiosk setup 
+#                                                
+# Note: This script is provided as-is without any warranty. Use at your own risk.
+###################################################################################
 
-## GLOBAL VARIABLES
+## GLOBAL VARIABLES AND DEFAULTS ##
 KIOSK_USER="kiosk"
 CONFIG_DIR="/home/$KIOSK_USER/.config"
 KIOSK_CONFIG_DIR="$CONFIG_DIR/ha-chromium-kiosk"
@@ -27,7 +38,8 @@ DEFAULT_HA_DASHBOARD_PATH="lovelace/default_view"
 
 PKGS_NEEDED=(xorg openbox chromium xserver-xorg xinit unclutter curl)
 
-## FUNCTIONS
+## FUNCTIONS ##
+
 # Print usage
 print_usage() {
     echo "Usage: sudo $0 {install|uninstall}"
@@ -35,6 +47,7 @@ print_usage() {
 }
 
 # Install the necessary packages
+# Keep track of the installed packages for later removal
 install_packages() {
     # Create the kiosk configuration directory
     mkdir -p "$KIOSK_CONFIG_DIR"
@@ -128,10 +141,11 @@ check_create_user() {
     fi
 }
 
+# Check and remove user if needed
 check_remove_user() {
     if id "$KIOSK_USER" &>/dev/null; then
         read -p "The kiosk user exists. Do you want to remove the user? (Y/n): " remove_user
-        if [[ $remove_user =~ ^[Yy]$ ]]; then
+        if [[ $remove_user =~ ^[Yy]?$ ]]; then
             echo "Removing the kiosk user..."
             userdel -r "$KIOSK_USER"
         else
@@ -179,7 +193,7 @@ install_kiosk() {
     prompt_user hide_cursor "Do you want to hide the mouse cursor? (Y/n)" "Y"
 
     KIOSK_MODE=""
-    [[ $enable_kiosk == "y" || $enable_kiosk == "Y" ]] && KIOSK_MODE="?kiosk=true"
+    [[ $enable_kiosk =~ ^[Yy]$ ]] && KIOSK_MODE="?kiosk=true"
 
     KIOSK_URL="http://$HA_IP:$HA_PORT/$HA_DASHBOARD_PATH$KIOSK_MODE"
     echo "Your Home Assistant dashboard will be displayed at: $KIOSK_URL"
@@ -215,7 +229,7 @@ xset s noblank
 # Optionally hide the mouse cursor
 EOF
 
-    [[ $hide_cursor == "y" || $hide_cursor == "Y" ]] && echo "unclutter -idle 0 &" >>/usr/local/bin/ha-chromium-kiosk.sh
+    [[ $hide_cursor =~ ^[Yy]$ ]] && echo "unclutter -idle 0 &" >>/usr/local/bin/ha-chromium-kiosk.sh
 
     cat <<EOF >>/usr/local/bin/ha-chromium-kiosk.sh
 
@@ -280,14 +294,14 @@ EOF
 
     # Prompt for immediate reboot
     prompt_user reboot_now "Setup is complete. Do you want to reboot now?" "n"
-    [[ $reboot_now == "y" || $reboot_now == "Y" ]] && { echo "Rebooting the system..."; reboot; } || echo "Setup is complete. Please reboot the system manually when ready."
+    [[ $reboot_now =~ ^[Yy]$ ]] && { echo "Rebooting the system..."; reboot; } || echo "Setup is complete. Please reboot the system manually when ready."
 }
 
 # Uninstall the kiosk setup
 uninstall_kiosk() {
     echo "This script will uninstall HA Chromium Kiosk and remove all associated configurations."
     prompt_user confirm "Are you sure you want to proceed? (Y/n)" "Y"
-    if [[ $confirm == "n" || $confirm == "N" ]]; then
+    if [[ $confirm =~ ^[Nn]$ ]]; then
         echo "Uninstall canceled."
         exit 0
     fi
@@ -330,7 +344,7 @@ uninstall_kiosk() {
         
         prompt_user remove_packages "Do you want to remove the installed packages? (Y/n)" "Y"
         
-        if [[ $remove_packages == "y" || $remove_packages == "Y" ]]; then
+        if [[ $remove_packages =~ ^[Yn]?$ ]]; then
             echo "Removing installed packages..."
             apt-get remove --purge -y $installed_packages
             
@@ -365,14 +379,14 @@ fi
 # Main script logic to handle install or uninstall
 case "$1" in
     install)
-        install_packages
         check_create_user
+        install_packages
         install_kiosk
         ;;
     uninstall)
         uninstall_kiosk
-        check_remove_user
         uninstall_packages
+        check_remove_user
         ;;
     *)
         print_usage
