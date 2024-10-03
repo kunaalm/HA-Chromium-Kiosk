@@ -1,7 +1,7 @@
 [Service]
     Type=simple
-    User=$KIOSK_USER
-    Group=$KIOSK_USER
+    User=__KIOSK_USER__
+    Group=__KIOSK_USER__
     PAMName=login
     Environment=XDG_RUNTIME_DIR=/run/user/%U
     ExecStart=/usr/bin/xinit /usr/bin/openbox-session -- :0 vt7 -nolisten tcp -nocursor -auth /var/run/kiosk.auth

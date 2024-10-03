@@ -456,100 +456,52 @@ install_kiosk() {
     # Configure auto login
     echo "Configuring auto-login for the kiosk user..."
     mkdir -p /etc/systemd/system/getty@tty1.service.d
-    cat <<EOF >/etc/systemd/system/getty@tty1.service.d/override.conf
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin $KIOSK_USER --noclear %I \$TERM
-Type=idle
-EOF
+    curl -o /etc/systemd/system/getty@tty1.service.d/override.conf \
+        https://github.com/kunaalm/ha-chromium-kiosk/raw/main/src/override.conf
+
+    # Adjust ExecStart line as required
+    sed -i "s/__KIOSK_USER__/$KIOSK_USER/g" /etc/systemd/system/getty@tty1.service.d/override.conf
 
     systemctl daemon-reload
     systemctl restart getty@tty1.service
 
     # Configure Openbox
     echo "Configuring Openbox for the kiosk user..."
-    sudo -u $KIOSK_USER mkdir -p /home/$KIOSK_USER/$OPENBOX_CONFIG_DIR
+    sudo -u "$KIOSK_USER" mkdir -p "/home/$KIOSK_USER/$OPENBOX_CONFIG_DIR"
 
-    # Create the kiosk startup script
-    echo "Creating the kiosk startup script..."
-    cat <<EOF >/usr/local/bin/ha-chromium-kiosk.sh
-#!/bin/bash
-
-# Disable screen blanking
-xset s off
-xset -dpms
-xset s noblank
-
-# Optionally hide the mouse cursor
-EOF
-
-    [[ $hide_cursor =~ ^[Yy]$ ]] && echo "unclutter -idle 0 &" >>/usr/local/bin/ha-chromium-kiosk.sh
-
-    cat <<EOF >>/usr/local/bin/ha-chromium-kiosk.sh
-
-check_network() {
-    while ! nc -z -w 5 $HA_IP $HA_PORT; do
-        echo "Checking if Home Assistant is reachable..."
-        sleep 2
-    done
-}
-
-check_network
-echo "Home Assistant is reachable. Starting Chromium..."
-
-chromium \
-    --noerrdialogs \
-    --disable-infobars \
-    --kiosk \
-    --disable-session-crashed-bubble \
-    --disable-features=TranslateUI \
-    --overscroll-history-navigation=0 \
-    --pull-to-refresh=2 \
-    "$KIOSK_URL"
-EOF
+    # Download the kiosk startup script
+    echo "Downloading the kiosk startup script..."
+    curl -o /usr/local/bin/ha-chromium-kiosk.sh \
+        https://github.com/kunaalm/ha-chromium-kiosk/raw/main/src/ha-chromium-kiosk.sh
 
     chmod +x /usr/local/bin/ha-chromium-kiosk.sh
 
+    # Update necessary placeholders in the downloaded script
+    sed -i "s/__KIOSK_USER__/$KIOSK_USER/g" /usr/local/bin/ha-chromium-kiosk.sh
+
     echo "Configuring Openbox to start the kiosk script..."
-    echo "/usr/local/bin/ha-chromium-kiosk.sh &" > $OPENBOX_CONFIG_DIR/autostart
-
+    curl -o "$OPENBOX_CONFIG_DIR/autostart" \
+        https://github.com/kunaalm/ha-chromium-kiosk/raw/main/src/autostart
+    
     # Create the systemd service
-    echo "Creating the systemd service..."
-    cat <<EOF >/etc/systemd/system/ha-chromium-kiosk.service
-[Unit]
-Description=Chromium Kiosk Mode for Home Assistant
-After=systemd-user-sessions.service network-online.target
-Wants=network-online.target
+    echo "Downloading the systemd service file..."
+    curl -o /etc/systemd/system/ha-chromium-kiosk.service \
+        https://github.com/kunaalm/ha-chromium-kiosk/raw/main/src/ha-chromium-kiosk.service
 
-[Service]
-Type=simple
-User=$KIOSK_USER
-Group=$KIOSK_USER
-PAMName=login
-Environment=XDG_RUNTIME_DIR=/run/user/%U
-ExecStart=/usr/bin/xinit /usr/bin/openbox-session -- :0 vt7 -nolisten tcp -nocursor -auth /var/run/kiosk.auth
-Restart=always
-RestartSec=5
-StandardInput=tty
-TTYPath=/dev/tty7
-TTYReset=yes
-TTYVHangup=yes
-TTYVTDisallocate=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    # Ensure the service uses the correct KIOSK_USER
+    sed -i "s/__KIOSK_USER__/$KIOSK_USER/g" /etc/systemd/system/ha-chromium-kiosk.service
 
     systemctl daemon-reload
     systemctl enable ha-chromium-kiosk.service
 
     echo "Adding the kiosk user to the tty group..."
-    usermod -aG tty $KIOSK_USER
+    usermod -aG tty "$KIOSK_USER"
 
     # Prompt for immediate reboot
     prompt_user reboot_now "Setup is complete. Do you want to reboot now?" "Y"
     [[ $reboot_now =~ ^[Yy]$ ]] && { echo "Rebooting the system..."; reboot; } || echo "Setup is complete. Please reboot the system manually when ready."
 }
+
 
 # Uninstall the kiosk setup
 uninstall_kiosk() {
@@ -597,35 +549,16 @@ uninstall_kiosk() {
     # Reload systemd configuration
     echo "Reloading systemd configuration..."
     systemctl daemon-reload
+}
 
-    # Optionally remove installed packages
-    if [[ -f "$KIOSK_CONFIG_DIR/installed-packages" ]]; then
-        installed_packages=$(< "$KIOSK_CONFIG_DIR/installed-packages")
-        echo "The following packages were installed:"
-        echo "$installed_packages"
-        
-        prompt_user remove_packages "Do you want to remove the installed packages? (Y/n)" "Y"
-        
-        if [[ $remove_packages =~ ^[Yn]?$ ]]; then
-            echo "Removing installed packages..."
-            for pkg in $installed_packages; do
-                uninstall_package "$pkg"
-                
-                # Check if package was removed successfully
-                if [[ $? -ne 0 ]]; then
-                    echo "Failed to remove package: $pkg. Please check manually."
-                else
-                    echo "Package $pkg removed successfully."
-                fi
-            done
-        else
-            echo "Installed packages were not removed."
-        fi
+# Function to check if Python is installed
+check_python() {
+    if ! command -v python3 &> /dev/null; then
+        echo "Python3 could not be found. Please install it before running this script."
+        exit 1
     else
-        echo "No installed packages list found."
+        echo "Python3 is installed."
     fi
-
-    echo "Uninstallation complete. The HA Chromium Kiosk setup has been removed."
 }
 
 ## SCRIPT STARTS HERE
@@ -637,6 +570,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 print_banner
+check_python
 
 # Check if argument is provided
 if [ -z "$1" ]; then
@@ -644,6 +578,8 @@ if [ -z "$1" ]; then
 fi
 
 # Main script logic to handle install or uninstall
+
+
 case "$1" in
     install)
         check_create_user
@@ -654,6 +590,7 @@ case "$1" in
         uninstall_kiosk
         uninstall_packages
         check_remove_user
+        echo "Uninstallation complete. The HA Chromium Kiosk setup has been removed."
         ;;
     *)
         print_usage

@@ -1,0 +1,13 @@
+# Autostart script for Openbox
+
+# Set a blank screensaver (prevent screen blanking)
+xset s off
+xset -dpms
+xset s noblank
+
+# Start Unclutter if mouse cursor needs to be hidden
+# Uncomment the line below to hide the mouse cursor
+# unclutter &
+
+# Automatically start the kiosk application
+/usr/local/bin/ha-chromium-kiosk.sh &
