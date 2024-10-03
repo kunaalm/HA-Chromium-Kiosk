@@ -1,0 +1,13 @@
+{
+    "homeassistant": {
+        "hostname": "homeassistant.local",
+        "ip_address": "",
+        "port": 8123,
+        "dashboard_url": "/lovelace/default_view",
+        "kiosk_mode": "Y"
+    },
+    "chromium": {
+        "hide_mouse": "Y",
+        "pull_to_refresh": "Y"
+    }
+}

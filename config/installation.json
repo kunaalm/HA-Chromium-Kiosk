@@ -1,0 +1,15 @@
+{
+    "package": {
+        "xorg": "needed",
+        "openbox": "needed",
+        "chromium": "needed",
+        "xserver-xorg": "needed",
+        "xinit": "needed",
+        "unclutter": "needed",
+        "curl": "needed"
+    },
+    "kiosk user": {
+        "name": "kiosk",
+        "existing": "false"
+    }
+}

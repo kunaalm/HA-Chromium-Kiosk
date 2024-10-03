@@ -28,15 +28,32 @@
 ###################################################################################
 
 ## GLOBAL VARIABLES AND DEFAULTS ##
-KIOSK_USER="kiosk"
-CONFIG_DIR="/home/$KIOSK_USER/.config"
+
+CONFIG_DIR=".config"
+
 KIOSK_CONFIG_DIR="$CONFIG_DIR/ha-chromium-kiosk"
+CONFIG_FILE="$KIOSK_CONFIG_DIR/config.json"
+INSTALL_FILE="$KIOSK_CONFIG_DIR/installation.json"
+
 OPENBOX_CONFIG_DIR="$CONFIG_DIR/openbox"
 
-DEFAULT_HA_PORT="8123"
-DEFAULT_HA_DASHBOARD_PATH="lovelace/default_view"
+# Separate variables to hold the configuration for each file
+HA_CONFIG=""
+INST_CONFIG=""
 
-PKGS_NEEDED=(xorg openbox chromium xserver-xorg xinit unclutter curl)
+# Variables to hold configuration values
+HA_HOSTNAME=""
+HA_IP_ADDRESS=""
+HA_PORT=""
+HA_DASHBOARD_URL=""
+HA_KIOSK_MODE=""
+CHROMIUM_HIDE_MOUSE=""
+CHROMIUM_PULL_TO_REFRESH=""
+KIOSK_USER=""
+KIOSK_USER_EXISTING=""
+
+declare -A PACKAGES  # Associative array to hold all package values (key-value pairs)
+
 
 ## FUNCTIONS ##
 
@@ -67,6 +84,119 @@ print_banner() {
     echo "* Use at your own risk. The author is not responsible for any damage or data loss."
     echo "* Press Ctrl+C to exit or any other key to continue."
     read -n 1 -s
+}
+
+# Function to load a JSON file into the respective variable
+load_config() {
+    local config_file=$1
+    local config_data_var=$2
+
+    eval "$config_data_var=\$(python3 -c \"
+import sys, json
+with open('$config_file', 'r') as f:
+    config = json.load(f)
+    print(json.dumps(config))
+    \")"
+}
+
+# Function to retrieve a value from the loaded configuration
+get_json_value() {
+    local config_data=$1
+    local key=$2
+    python3 -c "
+import sys, json
+config = json.loads('$config_data')
+print(eval('config' + \"$key\"))
+    "
+}
+
+# Function to retrieve all package names and their values into the associative array
+load_packages() {
+    local config_data=$1
+    local package_keys=$(python3 -c "
+import sys, json
+config = json.loads('$config_data')
+print(' '.join(config['package'].keys()))
+    ")
+
+    for package_key in $package_keys; do
+        PACKAGES["$package_key"]=$(get_json_value "$config_data" "['package']['$package_key']")
+    done
+}
+
+# Function to update the configuration in memory and write it back to the file
+update_json_value() {
+    local config_file=$1
+    local config_data=$2
+    local key=$3
+    local value=$4
+    updated_config=$(python3 -c "
+import sys, json
+config = json.loads('$config_data')
+
+# Navigate to the specified key and update the value
+keys = \"$key\".split('.')
+current = config
+for k in keys[:-1]:
+    current = current[k]
+current[keys[-1]] = \"$value\"
+
+# Return the updated config as a JSON string
+print(json.dumps(config))
+    ")
+
+    # Write the updated configuration back to the file
+    python3 -c "
+import sys, json
+with open('$config_file', 'w') as f:
+    json.dump(json.loads('$updated_config'), f, indent=4)
+    "
+}
+
+# Function to read all parameters from both config files into variables
+read_all_parameters() {
+    # Load config.json (Home Assistant)
+    CONFIG_FILE="config.json"
+    load_config "$CONFIG_FILE" "HA_CONFIG"
+    
+    HA_HOSTNAME=$(get_json_value "$HA_CONFIG" "['homeassistant']['hostname']")
+    HA_IP_ADDRESS=$(get_json_value "$HA_CONFIG" "['homeassistant']['ip_address']")
+    HA_PORT=$(get_json_value "$HA_CONFIG" "['homeassistant']['port']")
+    HA_DASHBOARD_URL=$(get_json_value "$HA_CONFIG" "['homeassistant']['dashboard_url']")
+    HA_KIOSK_MODE=$(get_json_value "$HA_CONFIG" "['homeassistant']['kiosk_mode']")
+    CHROMIUM_HIDE_MOUSE=$(get_json_value "$HA_CONFIG" "['chromium']['hide_mouse']")
+    CHROMIUM_PULL_TO_REFRESH=$(get_json_value "$HA_CONFIG" "['chromium']['pull_to_refresh']")
+
+    # Load installation.json (Installation Config)
+    INSTALL_FILE="installation.json"
+    load_config "$INSTALL_FILE" "INST_CONFIG"
+    
+    KIOSK_USER=$(get_json_value "$INST_CONFIG" "['kiosk user']['name']")
+    KIOSK_USER_EXISTING=$(get_json_value "$INST_CONFIG" "['kiosk user']['existing']")
+
+    # Dynamically load all package values into the associative array
+    load_packages "$INST_CONFIG"
+}
+
+# Function to write all updated parameters back to the config files
+write_all_parameters() {
+    # Write back to config.json (Home Assistant)
+    update_json_value "config.json" "$HA_CONFIG" "homeassistant.hostname" "$HA_HOSTNAME"
+    update_json_value "config.json" "$HA_CONFIG" "homeassistant.ip_address" "$HA_IP_ADDRESS"
+    update_json_value "config.json" "$HA_CONFIG" "homeassistant.port" "$HA_PORT"
+    update_json_value "config.json" "$HA_CONFIG" "homeassistant.dashboard_url" "$HA_DASHBOARD_URL"
+    update_json_value "config.json" "$HA_CONFIG" "homeassistant.kiosk_mode" "$HA_KIOSK_MODE"
+    update_json_value "config.json" "$HA_CONFIG" "chromium.hide_mouse" "$CHROMIUM_HIDE_MOUSE"
+    update_json_value "config.json" "$HA_CONFIG" "chromium.pull_to_refresh" "$CHROMIUM_PULL_TO_REFRESH"
+    
+    # Write back to installation.json (Installation Config)
+    update_json_value "installation.json" "$INST_CONFIG" "kiosk user.name" "$KIOSK_USER"
+    update_json_value "installation.json" "$INST_CONFIG" "kiosk user.existing" "$KIOSK_USER_EXISTING"
+    
+    # Loop through the packages array and write the updated values back to the file
+    for package_key in "${!PACKAGES[@]}"; do
+        update_json_value "installation.json" "$INST_CONFIG" "package.$package_key" "${PACKAGES[$package_key]}"
+    done
 }
 
 # Install a package and print dots while waiting
@@ -135,15 +265,18 @@ install_packages() {
 
     echo "Checking required packages..."
 
-    # Create a list of packages that need to be checked
-    pkgs_list="${PKGS_NEEDED[*]}"
-
-    # Get the install status of all required packages at once
-    dpkg_query_output=$(dpkg-query -W -f='${Package} ${Status}\n' $pkgs_list 2>/dev/null)
-
-    for pkg in "${PKGS_NEEDED[@]}"; do
-        if ! echo "$dpkg_query_output" | grep -q "^$pkg install ok installed$"; then
-            missing_pkgs+=("$pkg")
+    # Loop through the PACKAGES array to check which ones need installation
+    for package_key in "${!PACKAGES[@]}"; do
+        if [ "${PACKAGES[$package_key]}" = "needed" ]; then
+            # Check if the package is installed using dpkg-query
+            if dpkg -s "$package_key" > /dev/null 2>&1; then
+                # If the package is already installed, update its status
+                PACKAGES[$package_key]="pre-installed"
+                echo "$package_key is already installed (pre-installed)."
+            else
+                # If not installed, add it to the list of packages to install
+                missing_pkgs+=("$package_key")
+            fi
         fi
     done
 
@@ -161,6 +294,8 @@ install_packages() {
                 exit 1
             fi
 
+            # After a successful installation, update the package status
+            PACKAGES[$pkg]="installed"
             echo " Done."
         done
 
@@ -168,55 +303,73 @@ install_packages() {
     else
         echo "All prerequisites are already installed."
     fi
-
-    # Save the list of packages to remove later in a file
-    echo "${missing_pkgs[*]}" > "$KIOSK_CONFIG_DIR/installed-packages"
 }
 
-# Uninstall the installed packages
+# Uninstall only the that were packages installed by the script
 uninstall_packages() {
-    # Check if the installed-packages file exists
-    if [ -f "$KIOSK_CONFIG_DIR/installed-packages" ]; then
-        installed_packages=$(< "$KIOSK_CONFIG_DIR/installed-packages")
-        
-        if [ -n "$installed_packages" ]; then
-            echo "Removing installed packages..."
-            
-            # Uninstall the packages and handle errors
-            if ! apt-get purge -y $installed_packages; then
-                echo "Failed to purge some of the installed packages."
+    echo "Checking for packages to uninstall..."
+
+    # Initialize an array to hold the packages that need to be uninstalled
+    packages_to_remove=()
+
+    # Loop through the PACKAGES array and check for packages marked as "installed"
+    for package_key in "${!PACKAGES[@]}"; do
+        if [ "${PACKAGES[$package_key]}" = "installed" ]; then
+            packages_to_remove+=("$package_key")
+        fi
+    done
+
+    # If there are packages to uninstall, proceed
+    if [ ${#packages_to_remove[@]} -ne 0 ]; then
+        echo "Removing installed packages..."
+
+        total_pkgs=${#packages_to_remove[@]}
+        current_pkg=0
+
+        for pkg in "${packages_to_remove[@]}"; do
+            current_pkg=$((current_pkg + 1))
+            echo -ne "Uninstalling package $current_pkg of $total_pkgs: $pkg "
+
+            # Uninstall the package using the provided uninstall_package function
+            if ! uninstall_package "$pkg"; then
+                echo "Failed to uninstall package: $pkg"
                 exit 1
             fi
 
-            if ! apt-get autoremove -y; then
-                echo "Failed to autoremove some unnecessary packages."
-                exit 1
-            fi
-            
-            echo "Packages removed successfully."
-        else
-            echo "No packages to remove."
-        fi
+            echo " Done."
+
+            # Optionally, update the package statuses in the PACKAGES array to indicate removal
+            PACKAGES[$pkg]="removed"
+        done
+
+        echo "All installed packages have been removed."
     else
-        echo "No installed packages file found."
+        echo "No packages to remove."
     fi
 }
 
 # Check and create user
 check_create_user() {
-    # Ensure KIOSK_USER is set
+    # Ensure KIOSK_USER and KIOSK_USER_EXISTING are set
     if [ -z "$KIOSK_USER" ]; then
         echo "No username provided. Please set KIOSK_USER."
         exit 1
     fi
 
+    if [ "$KIOSK_USER_EXISTING" = "true" ]; then
+        echo "Using the existing user: $KIOSK_USER."
+        return
+    fi
+
+    # If KIOSK_USER_EXISTING is false, or not defined, check if the user exists
     while id "$KIOSK_USER" &>/dev/null; do
-        # Prompt to use existing user or create a new one, default to existing
-            read -p "The kiosk user already exists. Do you want to use the existing user? (Y/n): " use_existing
+        # Prompt to use existing user or create a new one
+        read -p "The kiosk user '$KIOSK_USER' already exists. Do you want to use the existing user? (Y/n): " use_existing
         use_existing=${use_existing:-Y}
 
         if [[ $use_existing =~ ^[Yy]$ ]]; then
             echo "Using the existing user."
+            KIOSK_USER_EXISTING="true"  # Update the user status in memory
             return
         elif [[ $use_existing =~ ^[Nn]$ ]]; then
             read -p "Enter a different username for the kiosk user: " KIOSK_USER
@@ -234,18 +387,31 @@ check_create_user() {
         exit 1
     fi
 
-    echo " Done."
+    # After successfully creating the user, update the status
+    KIOSK_USER_EXISTING="true"  # Update the status in memory
+    echo "Kiosk user '$KIOSK_USER' created successfully."
 }
 
-# Check and remove user if needed
 check_remove_user() {
     if id "$KIOSK_USER" &>/dev/null; then
-        read -p "The kiosk user exists. Do you want to remove the user? (Y/n): " remove_user
-        if [[ $remove_user =~ ^[Yy]?$ ]]; then
-            echo "Removing the kiosk user..."
-            userdel -rf "$KIOSK_USER"
+        if [ "$KIOSK_USER_EXISTING" = "true" ]; then
+            read -p "The kiosk user exists. Do you want to remove the user? (Y/n): " remove_user
+            remove_user=${remove_user:-N}
+
+            if [[ $remove_user =~ ^[Yy]$ ]]; then
+                echo "Removing the kiosk user..."
+                if userdel -rf "$KIOSK_USER"; then
+                    echo "User '$KIOSK_USER' removed successfully."
+                    KIOSK_USER_EXISTING="false"  # Update the status in memory
+                else
+                    echo "Failed to remove the kiosk user."
+                    exit 1
+                fi
+            else
+                echo "The kiosk user was not removed."
+            fi
         else
-            echo "The kiosk user was not removed."
+            echo "User '$KIOSK_USER' does not exist according to the configuration."
         fi
     else
         echo "The kiosk user does not exist."
@@ -272,16 +438,16 @@ prompt_user() {
 # Install the kiosk setup
 install_kiosk() {
     # Prompt user for necessary inputs
-    prompt_user HA_IP "Enter the IP address of your Home Assistant instance" ""
-    prompt_user HA_PORT "Enter the port for Home Assistant" "8123"
-    prompt_user HA_DASHBOARD_PATH "Enter the path to your Home Assistant dashboard" "lovelace/default_view"
+    prompt_user HA_IP_ADDRESS "Enter the IP address of your Home Assistant instance" "$HA_IP_ADDRESS"
+    prompt_user HA_PORT "Enter the port for Home Assistant" "$HA_PORT"
+    prompt_user HA_DASHBOARD_PATH "Enter the path to your Home Assistant dashboard" "$HA_DASHBOARD_URL"
 
     # Kiosk mode and cursor settings
-    prompt_user enable_kiosk "Do you want to enable kiosk mode? (Y/n)" "Y"
-    prompt_user hide_cursor "Do you want to hide the mouse cursor? (Y/n)" "Y"
+    prompt_user HA_KIOSK_MODE "Do you want to enable kiosk mode? (Y/n)" "$HA_KIOSK_MODE"
+    prompt_user CHROMIUM_HIDE_MOUSE "Do you want to hide the mouse cursor? (Y/n)" "$CHROMIUM_HIDE_MOUSE"
 
     KIOSK_MODE=""
-    [[ $enable_kiosk =~ ^[Yy]$ ]] && KIOSK_MODE="?kiosk=true"
+    [[ $HA_KIOSK_MODE =~ ^[Yy]$ ]] && KIOSK_MODE="?kiosk=true"
 
     KIOSK_URL="http://$HA_IP:$HA_PORT/$HA_DASHBOARD_PATH$KIOSK_MODE"
     echo "Your Home Assistant dashboard will be displayed at: $KIOSK_URL"
@@ -302,7 +468,7 @@ EOF
 
     # Configure Openbox
     echo "Configuring Openbox for the kiosk user..."
-    sudo -u $KIOSK_USER mkdir -p $OPENBOX_CONFIG_DIR
+    sudo -u $KIOSK_USER mkdir -p /home/$KIOSK_USER/$OPENBOX_CONFIG_DIR
 
     # Create the kiosk startup script
     echo "Creating the kiosk startup script..."
