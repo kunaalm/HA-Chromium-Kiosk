@@ -30,3 +30,17 @@ jobs:
           additional_files: ''
         env:
           SHELLCHECK_OPTS: -e SC2154
+
+  integration:
+    runs-on: ubuntu-latest
+    # Level 4 (TESTING.md) - real systemd install/uninstall against a
+    # genuine PID 1, not a bare container. Automates part of issue #31's
+    # gap (Level 4 was previously manual-only). Does NOT cover the kiosk
+    # GUI/Chromium rendering itself - see TESTING.md's "not covered"
+    # section for why that's out of scope for a container-based runner.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run integration test suite
+        run: bash tests/run-integration-tests.sh
