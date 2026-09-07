@@ -208,16 +208,48 @@ matching what you saw during Home Assistant setup in [Part 1](#12-dashboard-read
 
 ### Known caveat: `?kiosk=true` doesn't hide the sidebar on current HA
 
-The script appends `?kiosk=true` to the dashboard URL, which was a real
-feature of an older, third-party HACS "Kiosk Mode" card. **On current
-Home Assistant core, this query parameter has no built-in effect** — the
-sidebar and header are still visible, as shown in the screenshot above.
-If you want a true chrome-free dashboard (no sidebar/header), install the
-[Kiosk Mode HACS integration](https://github.com/NemesisRE/kiosk-mode)
-separately in Home Assistant itself; the setup script doesn't do this for
-you and has no option to. This is a documentation gap, not a script bug —
-worth fixing in a future doc pass or as a script enhancement (add a note,
-or drop the query param since it does nothing on modern HA).
+The script appends `?kiosk=true` to the dashboard URL, but **that alone
+does nothing on current Home Assistant core** — Chromium's own `--kiosk`
+flag (also used by this script) only hides the *browser's* chrome
+(address bar, tabs). Home Assistant's sidebar and header are rendered
+in-page by HA's own frontend JavaScript, which Chromium's kiosk flag
+has no way to reach into.
+
+`?kiosk=true` (or the shorter `?kiosk`) IS a real, working query string,
+but only if the separate, actively-maintained
+[Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin (789+
+stars, HACS Default, regularly updated against new HA releases) is
+installed **inside Home Assistant itself**. Without it, the sidebar
+stays visible as shown in the screenshot above — that's the state this
+guide's own validation run was in.
+
+**As of v0.10.2, the installer checks for this automatically** (a
+best-effort, non-blocking probe of HA's own static file server for the
+plugin's JS file) and tells you right in the install output whether it
+found it:
+
+```
+Checking whether the Kiosk Mode HA plugin is installed (hides the HA sidebar/header)...
+NOTE: The Kiosk Mode plugin does not appear to be installed in Home Assistant.
+Without it, the HA sidebar and header will remain visible even with kiosk mode enabled here -
+Chromium's own kiosk flag only hides the browser's own UI, not HA's in-page sidebar.
+
+To hide the sidebar/header, install the separate 'Kiosk Mode' plugin IN Home Assistant:
+  - Via HACS (recommended if you use HACS): search for 'Kiosk Mode' in HACS > Frontend.
+  - Manually: download kiosk-mode.js from https://github.com/NemesisRE/kiosk-mode/releases/latest,
+    place it in Home Assistant's www/ folder, then add it as a Lovelace resource
+    (Settings > Dashboards > ... menu > Resources > Add Resource).
+
+This is entirely optional and does not block this installation - continuing.
+```
+
+This is genuinely optional — the kiosk works fine without it, you just
+get HA's sidebar/header visible inside the full-screen Chromium window
+rather than a fully chrome-free dashboard. The installer does not attempt
+to install or configure the plugin itself (that would need Home
+Assistant API credentials the installer doesn't have and this script
+was deliberately kept out of scope of managing) — it only checks and
+tells you.
 
 ## Troubleshooting
 

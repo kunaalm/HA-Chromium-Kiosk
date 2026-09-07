@@ -591,6 +591,48 @@ install_kiosk() {
     echo "Your Home Assistant dashboard will be displayed at: $KIOSK_URL"
     echo "Setting up Chromium Kiosk Mode for Home Assistant URL:$KIOSK_URL"
 
+    # The '?kiosk=true' URL parameter above only does anything if the
+    # separate "Kiosk Mode" HACS plugin (NemesisRE/kiosk-mode) is
+    # installed IN Home Assistant itself - it hides the sidebar/header,
+    # which Chromium's own --kiosk flag (used later in this script)
+    # cannot touch since that UI is rendered by HA's frontend JS, not
+    # the browser chrome. Without it, kiosk=true is silently a no-op and
+    # the sidebar stays visible (see issue #35). This is a best-effort,
+    # non-blocking check - it probes HA's own static file server (no
+    # auth required, these are public frontend resources) for the
+    # plugin's JS file at either its HACS-managed path or the manual
+    # install path. Network errors, timeouts, or a missing plugin never
+    # block installation - they just produce an informational warning.
+    if [[ $enable_kiosk =~ ^[Yy]?$ ]]; then
+        echo "Checking whether the Kiosk Mode HA plugin is installed (hides the HA sidebar/header)..."
+        kiosk_plugin_found=false
+        for kiosk_plugin_path in "/hacsfiles/kiosk-mode/kiosk-mode.js" "/local/kiosk-mode.js"; do
+            if curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
+                "$HA_SCHEME://$HA_IP:$HA_PORT$kiosk_plugin_path" 2>/dev/null | grep -q "^200$"; then
+                kiosk_plugin_found=true
+                break
+            fi
+        done
+
+        if [ "$kiosk_plugin_found" = true ]; then
+            echo "Found the Kiosk Mode plugin - the sidebar/header will be hidden as expected."
+        else
+            echo ""
+            echo "NOTE: The Kiosk Mode plugin does not appear to be installed in Home Assistant."
+            echo "Without it, the HA sidebar and header will remain visible even with kiosk mode enabled here -"
+            echo "Chromium's own kiosk flag only hides the browser's own UI, not HA's in-page sidebar."
+            echo ""
+            echo "To hide the sidebar/header, install the separate 'Kiosk Mode' plugin IN Home Assistant:"
+            echo "  - Via HACS (recommended if you use HACS): search for 'Kiosk Mode' in HACS > Frontend."
+            echo "  - Manually: download kiosk-mode.js from https://github.com/NemesisRE/kiosk-mode/releases/latest,"
+            echo "    place it in Home Assistant's www/ folder, then add it as a Lovelace resource"
+            echo "    (Settings > Dashboards > ... menu > Resources > Add Resource)."
+            echo ""
+            echo "This is entirely optional and does not block this installation - continuing."
+            echo ""
+        fi
+    fi
+
     # Check for existing auto-login configuration
     write_tty1_config=true
     if [ -f "/etc/systemd/system/getty@tty1.service.d/override.conf" ]; then
