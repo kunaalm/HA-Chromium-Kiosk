@@ -64,95 +64,172 @@ DEFAULT_HA_DASHBOARD_PATH="lovelace/default_view"
 
 PKGS_NEEDED=(xorg openbox chromium xserver-xorg xinit unclutter curl netcat-openbsd)
 
+## UI COLORS (ASCII-safe, no unicode box-drawing - keeps terminal
+## compatibility across serial consoles / minimal TTYs). Disabled
+## automatically when stdout isn't a terminal (e.g. piped/logged output).
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    NC='\033[0m'
+else
+    RED=''; GREEN=''; YELLOW=''; CYAN=''; BOLD=''; NC=''
+fi
+
 ## FUNCTIONS ##
 
 # Print usage
 print_usage() {
-    echo "Usage: sudo $0 {install|uninstall}"
-    exit 1
+    echo -e "${BOLD}Usage:${NC} sudo $0 ${YELLOW}{install|uninstall|help}${NC}"
+    echo -e "  ${YELLOW}install${NC}    - Install and configure the HA Chromium Kiosk"
+    echo -e "  ${YELLOW}uninstall${NC}  - Remove the HA Chromium Kiosk setup"
+    echo -e "  ${YELLOW}help${NC}       - Display this help message"
+
+    # Only exit if this is not the help command
+    if [[ "$1" != "help" ]]; then
+        exit 1
+    fi
 }
 
 # Print banner
 print_banner() {
-    echo "****************************************************************************************************"
+    echo -e "${CYAN}****************************************************************************************************${NC}"
     echo "    __  _____       ________                         _                    __ __ _            __   "
     echo "   / / / /   |     / ____/ /_  _________  ____ ___  (_)_  ______ ___     / //_/(_)___  _____/ /__ "
-    echo "  / /_/ / /| |    / /   / __ \/ ___/ __ \/ __ \`__ \/ / / / / __ \`__ \   / ,<  / / __ \/ ___/ //_/ "
+    echo "  / /_/ / /| |    / /   / __ \\/ ___/ __ \\/ __ \`__ \\/ / / / / __ \`__ \\   / ,<  / / __ \\/ ___/ //_/ "
     echo " / __  / ___ |   / /___/ / / / /  / /_/ / / / / / / / /_/ / / / / / /  / /| |/ / /_/ (__  ) ,<    "
-    echo "/_/ /_/_/  |_|   \____/_/ /_/_/   \____/_/ /_/ /_/_/\__,_/_/ /_/ /_/  /_/ |_/_/\____/____/_/|_|   "
+    echo "/_/ /_/_/  |_|   \\____/_/ /_/_/   \\____/_/ /_/ /_/_/\\__,_/_/ /_/ /_/  /_/ |_/_/\\____/____/_/|_|   "
     echo "                                                                                                  "
-    echo "                                                                                                 "
-    echo "                        Setup and Install or Uninstall Script for HA Chromium Kiosk              "
-    echo "                                                                                                 "
-    echo "****************************************************************************************************"
-    echo "***                               WARNING: USE AT YOUR OWN RISK                                  ***"
-    echo "****************************************************************************************************"
-    echo "                                                                                                 "
-    echo "* This script will install or uninstall HA Chromium Kiosk setup."
-    echo "* Please read the script before running it to understand what it does."
-    echo "* Use at your own risk. The author is not responsible for any damage or data loss."
-    echo "* Press Ctrl+C to exit or any other key to continue."
+    echo -e "${BOLD}                        Setup and Install or Uninstall Script for HA Chromium Kiosk${NC}              "
+    echo -e "${CYAN}****************************************************************************************************${NC}"
+    echo -e "${RED}${BOLD}***                               WARNING: USE AT YOUR OWN RISK                                  ***${NC}"
+    echo -e "${CYAN}****************************************************************************************************${NC}"
+    echo ""
+    echo -e "${BOLD}This script will:${NC}"
+    echo -e " ${GREEN}*${NC} Create a dedicated kiosk user"
+    echo -e " ${GREEN}*${NC} Install necessary packages (X server, Chromium, Openbox)"
+    echo -e " ${GREEN}*${NC} Configure auto-login for the kiosk user"
+    echo -e " ${GREEN}*${NC} Set up Chromium in kiosk mode for Home Assistant"
+    echo -e " ${GREEN}*${NC} Create a systemd service to start the kiosk on boot"
+    echo ""
+    echo -e "* Please read the script before running it to understand what it does."
+    echo -e "* Use at your own risk. The author is not responsible for any damage or data loss."
+    echo -e "${BOLD}Press ${GREEN}[Enter]${NC}${BOLD} to continue or ${RED}[Ctrl+C]${NC}${BOLD} to exit${NC}"
     read -n 1 -s
 }
 
-# Install a package and print dots while waiting
+# Show a summary of what an action will do, and confirm before proceeding.
+# Ported from the improved-ui branch's show_summary(), reimplemented on top
+# of main's (already bug-fixed) install/uninstall flow rather than merged
+# from that branch directly - see Homelab/Code/Projects/HA Chromium Kiosk.md
+# in the vault for why the branch itself wasn't merged as-is.
+show_summary() {
+    local action=$1
+
+    echo -e "\n${BOLD}${CYAN}-- Summary of Actions --${NC}"
+
+    if [[ "$action" == "install" ]]; then
+        echo -e " ${BOLD}The installation will:${NC}"
+        echo -e " ${GREEN}1.${NC} Create a dedicated kiosk user"
+        echo -e " ${GREEN}2.${NC} Install necessary packages:"
+        echo -e "    - X server (xorg, xserver-xorg)"
+        echo -e "    - Window manager (openbox)"
+        echo -e "    - Browser (chromium)"
+        echo -e "    - Utilities (xinit, unclutter, curl, netcat-openbsd)"
+        echo -e " ${GREEN}3.${NC} Configure auto-login for the kiosk user"
+        echo -e " ${GREEN}4.${NC} Set up Chromium in kiosk mode for Home Assistant"
+        echo -e " ${GREEN}5.${NC} Create a systemd service to start the kiosk on boot"
+    else
+        echo -e " ${BOLD}The uninstallation will:${NC}"
+        echo -e " ${GREEN}1.${NC} Stop and disable the kiosk systemd service"
+        echo -e " ${GREEN}2.${NC} Remove configuration files:"
+        echo -e "    - Systemd service file"
+        echo -e "    - Kiosk startup script"
+        echo -e "    - Openbox autostart configuration"
+        echo -e "    - Auto-login configuration"
+        echo -e " ${GREEN}3.${NC} Optionally remove installed packages"
+        echo -e " ${GREEN}4.${NC} Optionally remove the kiosk user"
+    fi
+
+    echo -e "${CYAN}------------------------${NC}\n"
+
+    prompt_user confirm_action "Do you want to proceed with the $action?" "Y"
+    if [[ ! $confirm_action =~ ^[Yy]?$ ]]; then
+        echo -e "${YELLOW}Operation canceled by user.${NC}"
+        exit 0
+    fi
+}
+
+# Install a package with a spinner animation instead of a silent dot-loop.
 install_package() {
     local package=$1
-    local dot_pid
+    local spinner_pid
     local apt_status
+    local spinner_chars='-\|/'
 
-    # Start a background job to print dots
-    while true; do
-        echo -n "..."
-        sleep 1
-    done &
+    (
+        i=0
+        while true; do
+            i=$(( (i + 1) % 4 ))
+            printf "\r${CYAN}%s${NC} Installing ${YELLOW}%s${NC}...   " "${spinner_chars:$i:1}" "$package"
+            sleep 0.15
+        done
+    ) &
+    spinner_pid=$!
 
-    # Capture the PID of the background job
-    dot_pid=$!
-
-    # Run apt-get update and install silently
-    sudo apt-get update > /dev/null 2>&1
-    sudo apt-get install -y "$package" > /dev/null 2>&1
-    # Capture the exit status of the apt-get command
+    apt-get update > /dev/null 2>&1
+    apt-get install -y "$package" > /dev/null 2>&1
     apt_status=$?
 
-    # Kill the background job
-    kill $dot_pid 2>/dev/null || true
+    # Kill the spinner directly rather than via a local EXIT trap - this
+    # function runs under the script's global 'trap cleanup EXIT' (set at
+    # the top of the file), and a local `trap ... EXIT` here would
+    # overwrite that global trap for the rest of the script's lifetime
+    # once cleared with `trap - EXIT` (an earlier draft of this function
+    # did exactly that - caught during review, not shipped).
+    kill "$spinner_pid" 2>/dev/null || true
+    wait "$spinner_pid" 2>/dev/null || true
 
-    # Wait for the background job to completely terminate
-    wait $dot_pid 2>/dev/null || true
+    if [ $apt_status -eq 0 ]; then
+        printf "\r${GREEN}OK${NC} Installed ${YELLOW}%s${NC}                    \n" "$package"
+    else
+        printf "\r${RED}FAILED${NC} Installing ${YELLOW}%s${NC}                 \n" "$package"
+    fi
 
-    # Return the exit status of the apt-get command
     return $apt_status
 }
 
 # Uninstall the installed package and print dots while waiting
 uninstall_package() {
     local package=$1
-    local dot_pid
+    local spinner_pid
     local apt_status
+    local spinner_chars='-\|/'
 
-    # Start a background job to print dots
-    while true; do
-        echo -n "..."
-        sleep 1
-    done &
+    (
+        i=0
+        while true; do
+            i=$(( (i + 1) % 4 ))
+            printf "\r${CYAN}%s${NC} Removing ${YELLOW}%s${NC}...   " "${spinner_chars:$i:1}" "$package"
+            sleep 0.15
+        done
+    ) &
+    spinner_pid=$!
 
-    # Capture the PID of the background job
-    dot_pid=$!
-
-    # Run apt-get remove silently
-    sudo apt-get remove --purge -y "$package" > /dev/null 2>&1
-    # Capture the exit status of the apt-get command
+    apt-get remove --purge -y "$package" > /dev/null 2>&1
     apt_status=$?
 
-    # Kill the background job
-    kill $dot_pid 2>/dev/null || true
+    kill "$spinner_pid" 2>/dev/null || true
+    wait "$spinner_pid" 2>/dev/null || true
 
-    # Wait for the background job to completely terminate
-    wait $dot_pid 2>/dev/null || true
+    if [ $apt_status -eq 0 ]; then
+        printf "\r${GREEN}OK${NC} Removed ${YELLOW}%s${NC}                      \n" "$package"
+    else
+        printf "\r${RED}FAILED${NC} Removing ${YELLOW}%s${NC}                   \n" "$package"
+    fi
 
-    # Return the exit status of the apt-get command
     return $apt_status
 }
 
@@ -867,9 +944,17 @@ uninstall_kiosk() {
 ## SCRIPT STARTS HERE
 # Check if script is run with sudo
 if [ "$EUID" -ne 0 ]; then
-    echo "ERROR: This script needs to be run as root"
+    echo -e "${RED}ERROR: This script needs to be run as root${NC}"
     echo "Re-run with sudo $0"
     exit 1
+fi
+
+# Handle 'help' before the banner/confirmation prompt - it's a read-only
+# informational command, shouldn't require reading through the warning
+# banner or the interactive [Enter] prompt first.
+if [ "$1" = "help" ]; then
+    print_usage help
+    exit 0
 fi
 
 print_banner
@@ -882,14 +967,18 @@ fi
 # Main script logic to handle install or uninstall
 case "$1" in
     install)
+        show_summary install
         check_create_user
         install_packages
         install_kiosk
+        echo -e "\n${GREEN}${BOLD}Installation complete.${NC}"
         ;;
     uninstall)
+        show_summary uninstall
         uninstall_kiosk
         uninstall_packages
         check_remove_user
+        echo -e "\n${GREEN}${BOLD}Uninstallation complete.${NC}"
         ;;
     *)
         print_usage
