@@ -630,17 +630,17 @@ check_network() {
         fi
     fi
 
-    while [ $attempt -lt $max_attempts ] && [ "$success" = "false" ]; do
+    while [ \$attempt -lt \$max_attempts ] && [ "\$success" = "false" ]; do
         if nc -z -w 5 "$HA_IP" "$HA_PORT" 2>/dev/null; then
             success=true
             echo "Connection to Home Assistant established!"
         else
-            attempt=$((attempt + 1))
-            if [ $attempt -lt $max_attempts ]; then
-                echo "Attempt $attempt of $max_attempts: Home Assistant not reachable yet. Retrying in 2 seconds..."
+            attempt=\$((attempt + 1))
+            if [ \$attempt -lt \$max_attempts ]; then
+                echo "Attempt \$attempt of \$max_attempts: Home Assistant not reachable yet. Retrying in 2 seconds..."
                 sleep 2
             else
-                echo "Warning: Could not connect to Home Assistant after $max_attempts attempts."
+                echo "Warning: Could not connect to Home Assistant after \$max_attempts attempts."
                 echo "The kiosk will continue to try connecting when it starts."
                 echo "Please ensure Home Assistant is running at $HA_IP:$HA_PORT"
                 return 1
