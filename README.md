@@ -40,7 +40,7 @@ This setup is ideal for creating a dedicated, full-screen Home Assistant web kio
 - **Internet access** for `apt-get update`/`install` — the script installs its own dependencies automatically (`xorg`, `openbox`, `chromium`, `xserver-xorg`, `xinit`, `unclutter`, `curl`, `netcat-openbsd`). Nothing needs to be pre-installed manually beyond `sudo` itself.
 - **A reachable Home Assistant instance** — you'll be prompted for its IP/hostname, port, and dashboard path during installation. No default IP is provided.
 - **No display manager should be running** — the script's whole approach (auto-login + Openbox + a systemd service) is designed to replace one, not coexist with an existing GDM/LightDM/SDDM setup.
-- **(Optional) The [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin installed in Home Assistant** — if you enable "kiosk mode" during installation (recommended, on by default), this script appends `?kiosk=true` to the dashboard URL and uses Chromium's own `--kiosk` flag to hide the *browser's* chrome (address bar, tabs). It **cannot** hide Home Assistant's own in-page sidebar and header — that UI is rendered by HA's frontend JavaScript, not the browser, and Chromium has no way to reach into it. Hiding the sidebar/header requires installing this separate plugin **inside Home Assistant itself** (via HACS, or manually — see the [how-to guide](docs/how-to-kiosk-setup.md#known-caveat-kiosktrue-doesnt-hide-the-sidebar-on-current-ha) for both paths). Not required for the kiosk to work — without it you'll still get a full-screen Chromium window, just with HA's sidebar/header visible inside it. The installer checks for it automatically (best-effort, non-blocking — see below) and tells you if it's missing.
+- **(Optional) The [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin installed in Home Assistant** — if you enable "kiosk mode" during installation (recommended, on by default), this script appends `?kiosk=true` to the dashboard URL and uses Chromium's own `--kiosk` flag to hide the *browser's* chrome (address bar, tabs). It **cannot** hide Home Assistant's own in-page sidebar and header — that UI is rendered by HA's frontend JavaScript, not the browser, and Chromium has no way to reach into it. Hiding the sidebar/header requires installing this separate plugin **inside Home Assistant itself** (via HACS, or manually — see the [how-to guide](docs/how-to-kiosk-setup.md#caveat-kiosktrue-doesnt-hide-the-ha-sidebar-by-itself) for both paths). Not required for the kiosk to work — without it you'll still get a full-screen Chromium window, just with HA's sidebar/header visible inside it. The installer checks for it automatically (best-effort, non-blocking — see below) and tells you if it's missing.
 
 ## Features
 
@@ -135,7 +135,7 @@ See [TESTING.md](TESTING.md) for the full test plan (static analysis, function-l
 
 ### How-To Guide
 
-See [docs/how-to-kiosk-setup.md](docs/how-to-kiosk-setup.md) for a full walkthrough — setting up Home Assistant, installing the kiosk, and validating the connection — with real screenshots and terminal output from an actual end-to-end test run.
+See [docs/how-to-kiosk-setup.md](docs/how-to-kiosk-setup.md) for a full walkthrough — downloading, installing, and validating the kiosk against your existing Home Assistant instance — with real screenshots and terminal output from an actual end-to-end test run.
 
 ### Author
 **Kunaal Mahanti**
