@@ -488,7 +488,13 @@ Type=idle
 EOF
 
     systemctl daemon-reload
-    systemctl restart getty@tty1.service
+    # NOTE: intentionally NOT restarting getty@tty1.service here (see issue #20).
+    # Restarting it mid-install can immediately auto-login as $KIOSK_USER on tty1,
+    # killing the interactive shell running this installer, before the kiosk
+    # systemd service / Openbox config / startup script even exist yet. The
+    # actual kiosk session runs on tty7 via ha-chromium-kiosk.service, not tty1 -
+    # the auto-login override only needs to take effect on the next boot/login,
+    # which the end-of-install reboot prompt already covers.
 
     # Configure Openbox
     echo "Configuring Openbox for the kiosk user..."
