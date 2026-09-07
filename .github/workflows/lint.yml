@@ -20,3 +20,13 @@ jobs:
         with:
           scandir: '.'
           severity: warning
+          # SC2154 (var referenced but not assigned) is expected and
+          # documented as safe for this script: prompt_user() assigns
+          # its result variables via `declare -g`, which ShellCheck
+          # cannot trace through - see the comment in prompt_user()
+          # and issue #26. Disabling just that check rather than
+          # raising the whole severity threshold, so real new warnings
+          # still fail the build.
+          additional_files: ''
+        env:
+          SHELLCHECK_OPTS: -e SC2154
