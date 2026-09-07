@@ -300,7 +300,7 @@ check_create_user() {
     done
 
     echo "Creating the kiosk user..."
-    if ! adduser --disabled-password --gecos "" "$KIOSK_USER" 2>&1 >/dev/null; then
+    if ! adduser --disabled-password --gecos "" "$KIOSK_USER" >/dev/null; then
         echo "Failed to create the kiosk user. Exiting..."
         exit 1
     fi
@@ -428,7 +428,14 @@ prompt_user() {
         break
     done
 
-    # Use declare instead of eval for secure variable assignment
+    # Use declare instead of eval for secure variable assignment.
+    # NOTE: this dynamically creates/sets $var_name at the caller's scope,
+    # which ShellCheck cannot trace (SC2154 "referenced but not assigned"
+    # at every call site that reads the resulting variable, e.g.
+    # $backup_config, $enable_kiosk, $hide_cursor, $reboot_now, etc.).
+    # That's expected/safe here since every read site is always preceded
+    # by a prompt_user call for that same variable name in this script's
+    # control flow - see issue #26.
     declare -g "$var_name"="$value"
 }
 
@@ -465,8 +472,8 @@ check_backup_config() {
 install_kiosk() {
     # Prompt user for necessary inputs
     prompt_user HA_IP "Enter the IP address of your Home Assistant instance" ""
-    prompt_user HA_PORT "Enter the port for Home Assistant" "8123"
-    prompt_user HA_DASHBOARD_PATH "Enter the path to your Home Assistant dashboard" "lovelace/default_view"
+    prompt_user HA_PORT "Enter the port for Home Assistant" "$DEFAULT_HA_PORT"
+    prompt_user HA_DASHBOARD_PATH "Enter the path to your Home Assistant dashboard" "$DEFAULT_HA_DASHBOARD_PATH"
 
     # Kiosk mode and cursor settings
     prompt_user enable_kiosk "Do you want to enable kiosk mode? (Y/n)" "Y"
@@ -526,8 +533,20 @@ EOF
 
     if [ "$write_kiosk_script" = true ]; then
     # Create the kiosk startup script
+    # Written to a temp file first, then moved into place atomically (mv on
+    # the same filesystem) so a re-install while the kiosk service is live
+    # can't truncate the script mid-read by a running process (issue #29).
+    # Also best-effort stop the service first, in case it's actively running.
+    KIOSK_SCRIPT_TMP=$(mktemp /usr/local/bin/.ha-chromium-kiosk.sh.XXXXXX)
+    kiosk_service_was_active=false
+    if systemctl is-active --quiet ha-chromium-kiosk.service 2>/dev/null; then
+        kiosk_service_was_active=true
+        echo "Stopping the running kiosk service before updating its script..."
+        systemctl stop ha-chromium-kiosk.service
+    fi
+
     echo "Creating the kiosk startup script..."
-    cat <<EOF >/usr/local/bin/ha-chromium-kiosk.sh
+    cat <<EOF >"$KIOSK_SCRIPT_TMP"
 #!/bin/bash
 
 # Disable screen blanking
@@ -538,9 +557,9 @@ xset s noblank
 # Optionally hide the mouse cursor
 EOF
 
-    [[ $hide_cursor =~ ^[Yy]?$ ]] && echo "unclutter -idle 0 &" >>/usr/local/bin/ha-chromium-kiosk.sh
+    [[ $hide_cursor =~ ^[Yy]?$ ]] && echo "unclutter -idle 0 &" >>"$KIOSK_SCRIPT_TMP"
 
-    cat <<EOF >>/usr/local/bin/ha-chromium-kiosk.sh
+    cat <<EOF >>"$KIOSK_SCRIPT_TMP"
 
 check_network() {
     local max_attempts=30  # Maximum number of attempts (30 * 2 seconds = 1 minute timeout)
@@ -600,7 +619,13 @@ chromium \
     "$KIOSK_URL"
 EOF
 
-    chmod +x /usr/local/bin/ha-chromium-kiosk.sh
+    chmod +x "$KIOSK_SCRIPT_TMP"
+    mv "$KIOSK_SCRIPT_TMP" /usr/local/bin/ha-chromium-kiosk.sh
+
+    if [ "$kiosk_service_was_active" = true ]; then
+        echo "Restarting the kiosk service with the updated script..."
+        systemctl start ha-chromium-kiosk.service
+    fi
     else
         echo "Skipping kiosk startup script - existing file will not be modified."
     fi

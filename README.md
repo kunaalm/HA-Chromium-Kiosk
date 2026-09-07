@@ -48,6 +48,12 @@ This setup is ideal for creating a dedicated, full-screen Home Assistant web kio
    wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/v0.9.1/ha-chromium-kiosk-setup.sh
    ```
 
+   **Verify the download** before running it as root (recommended, since this script requires sudo):
+   ```bash
+   echo "ca1558c1844dfee3d9a6b034261776d04f934a5dbfb561ce8a5fc50f71568c77  ha-chromium-kiosk-setup.sh" | sha256sum -c -
+   ```
+   This checksum matches the v0.9.1 tag. If you download a different version, verify against that release's own commit/tag content instead (`git show <tag>:ha-chromium-kiosk-setup.sh | sha256sum`), not this value.
+
    **Option 2**: Download from the main branch (development version)
    ```bash
    wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/main/ha-chromium-kiosk-setup.sh
