@@ -4,11 +4,12 @@ This script sets up a light Chromium-based kiosk mode on a Debian server specifi
 
 ## Latest Release
 
-**Current Stable Release**: [v0.10.1](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.1)
+**Current Stable Release**: [v0.10.2](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.2)
 
 We recommend using the latest stable release for the best experience. The release page includes installation instructions and a summary of features.
 
 **Release Notes**:
+- v0.10.2: The installer now checks whether the [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) HA plugin is installed when kiosk mode is enabled, and tells you if it's missing (non-blocking) — without it, HA's sidebar/header remain visible even though Chromium's own kiosk flag is active.
 - v0.10.1: Added an upfront check for the `sudo` binary (some minimal Debian images don't ship it by default, causing a confusing failure deep into installation); added a Prerequisites section to this README.
 - v0.10.0: HTTPS support, display rotation, pinch-zoom/scale-factor options, color-coded UI with progress spinners, a working `help` command, an install/uninstall confirmation summary, and a fixed silent bug where the installed kiosk's network-reachability check never actually ran. Full test plan and CI integration tests added. See the [release notes](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.0) for the complete list.
 - v0.9.1: Fixed IP address validation bug that incorrectly rejected valid IP addresses
@@ -58,16 +59,16 @@ This setup is ideal for creating a dedicated, full-screen Home Assistant web kio
 
 1. **Download the script**:
 
-   **Option 1 (Recommended)**: Download from the latest stable release (v0.10.1)
+   **Option 1 (Recommended)**: Download from the latest stable release (v0.10.2)
    ```bash
-   wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/v0.10.1/ha-chromium-kiosk-setup.sh
+   wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/v0.10.2/ha-chromium-kiosk-setup.sh
    ```
 
    **Verify the download** before running it as root (recommended, since this script requires sudo):
    ```bash
-   echo "f461326b6bf6b6042372a01811f14964dc5cc2d8df40efdc7af3730980def763  ha-chromium-kiosk-setup.sh" | sha256sum -c -
+   echo "32c1b63a794f5df88bff27cb2f9eda7acc96b2d80be3dc3d198df84970988a98  ha-chromium-kiosk-setup.sh" | sha256sum -c -
    ```
-   This checksum matches the v0.10.1 tag. If you download a different version, verify against that release's own commit/tag content instead (`git show <tag>:ha-chromium-kiosk-setup.sh | sha256sum`), not this value.
+   This checksum matches the v0.10.2 tag. If you download a different version, verify against that release's own commit/tag content instead (`git show <tag>:ha-chromium-kiosk-setup.sh | sha256sum`), not this value.
 
    **Option 2**: Download from the main branch (development version)
    ```bash
@@ -120,6 +121,7 @@ The script will prompt you for optional settings, such as hiding the mouse curso
    ```
 ### Versioning
 
+- **v0.10.2** - Patch release: non-blocking check for the Kiosk Mode HA plugin when kiosk mode is enabled
 - **v0.10.1** - Patch release: added an upfront `sudo`-binary check and a Prerequisites section
 - **v0.10.0** - Feature release: HTTPS support, display rotation, pinch-zoom/scale-factor options, color-coded UI, spinner animations, `help` command, install/uninstall summary+confirmation, and a fix for a silent kiosk network-check bug
 - **v0.9.1** - Bug fix release: Fixed IP address validation
