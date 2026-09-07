@@ -110,6 +110,10 @@ The script will prompt you for optional settings, such as hiding the mouse curso
 - Future releases will follow semantic versioning (MAJOR.MINOR.PATCH)
 - For a detailed list of changes in each version, see the [Releases page](https://github.com/kunaalm/ha-chromium-kiosk/releases)
 
+### Testing
+
+See [TESTING.md](TESTING.md) for the full test plan (static analysis, function-level dry runs, generated-artifact verification, and real systemd integration tests) before contributing a change or cutting a release.
+
 ### Author
 **Kunaal Mahanti**
 
