@@ -227,8 +227,12 @@ docker exec -u 1000 kiosktest /root/ha-chromium-kiosk-setup.sh install
 
 ## What's still NOT covered (open gap, tracked as #31)
 
-- No automated harness runs Level 4 (real systemd integration) in CI —
-  it's manual-only today. CI (`lint.yml`) only covers Level 1.
+- ~~No automated harness runs Level 4 (real systemd integration) in CI~~
+  **Closed 2026-09-07**: `tests/run-integration-tests.sh` automates the
+  4a-4e + #25 regression cases and runs as a second CI job
+  (`.github/workflows/lint.yml`, job `integration`) on every push/PR.
+  19/19 assertions pass on GitHub-hosted `ubuntu-latest` runners
+  (confirmed - not just locally).
 - No test actually exercises the kiosk GUI session itself (X server,
   Openbox, Chromium rendering) — Level 4 tests can confirm the systemd
   service is *enabled* and the generated script is *correct*, but not
