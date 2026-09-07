@@ -474,15 +474,43 @@ install_kiosk() {
     prompt_user HA_IP "Enter the IP address of your Home Assistant instance" ""
     prompt_user HA_PORT "Enter the port for Home Assistant" "$DEFAULT_HA_PORT"
     prompt_user HA_DASHBOARD_PATH "Enter the path to your Home Assistant dashboard" "$DEFAULT_HA_DASHBOARD_PATH"
+    prompt_user use_https "Does your Home Assistant instance use HTTPS? (y/N)" "N"
 
     # Kiosk mode and cursor settings
     prompt_user enable_kiosk "Do you want to enable kiosk mode? (Y/n)" "Y"
     prompt_user hide_cursor "Do you want to hide the mouse cursor? (Y/n)" "Y"
 
+    # Display rotation (issue #22) - most useful for Pi + touchscreen setups
+    # mounted in portrait or upside-down orientation.
+    prompt_user rotate_display "Do you want to rotate the display? (y/N)" "N"
+    if [[ $rotate_display =~ ^[Yy]$ ]]; then
+        prompt_user display_output "Enter the display output name to rotate (check with 'xrandr' after first boot if unsure, e.g. HDMI-1)" "HDMI-1"
+        while true; do
+            prompt_user display_rotation "Enter rotation: normal, left, right, or inverted" "normal"
+            case "$display_rotation" in
+                normal|left|right|inverted) break ;;
+                *) echo "Error: rotation must be one of normal, left, right, inverted." ;;
+            esac
+        done
+    fi
+
+    # Pinch-to-zoom and default zoom level (issue #24)
+    prompt_user disable_pinch_zoom "Do you want to disable pinch-to-zoom on touchscreens? (y/N)" "N"
+    while true; do
+        prompt_user zoom_percent "Enter a default zoom percentage for the dashboard (e.g. 100, 125, 150)" "100"
+        if [[ "$zoom_percent" =~ ^[0-9]+$ ]] && [ "$zoom_percent" -ge 25 ] && [ "$zoom_percent" -le 500 ]; then
+            break
+        fi
+        echo "Error: zoom percentage must be a whole number between 25 and 500."
+    done
+
     KIOSK_MODE=""
     [[ $enable_kiosk =~ ^[Yy]?$ ]] && KIOSK_MODE="?kiosk=true"
 
-    KIOSK_URL="http://$HA_IP:$HA_PORT/$HA_DASHBOARD_PATH$KIOSK_MODE"
+    HA_SCHEME="http"
+    [[ $use_https =~ ^[Yy]$ ]] && HA_SCHEME="https"
+
+    KIOSK_URL="$HA_SCHEME://$HA_IP:$HA_PORT/$HA_DASHBOARD_PATH$KIOSK_MODE"
     echo "Your Home Assistant dashboard will be displayed at: $KIOSK_URL"
     echo "Setting up Chromium Kiosk Mode for Home Assistant URL:$KIOSK_URL"
 
@@ -559,6 +587,27 @@ EOF
 
     [[ $hide_cursor =~ ^[Yy]?$ ]] && echo "unclutter -idle 0 &" >>"$KIOSK_SCRIPT_TMP"
 
+    if [[ $rotate_display =~ ^[Yy]$ ]]; then
+        cat <<EOF >>"$KIOSK_SCRIPT_TMP"
+
+# Rotate the display (issue #22). Touchscreen input is NOT automatically
+# rotated to match - if using a touchscreen, you'll likely also need
+# 'xinput --map-to-output <device-id> $display_output' or equivalent for
+# your specific touch controller, added manually after installation.
+DISPLAY=:0 xrandr --output $display_output --rotate $display_rotation
+EOF
+    fi
+
+    # Pinch-to-zoom disable and default zoom level (issue #24), computed
+    # here at install time so the resulting flag string is baked into the
+    # generated kiosk script as a literal value below.
+    EXTRA_CHROMIUM_FLAGS=""
+    [[ $disable_pinch_zoom =~ ^[Yy]$ ]] && EXTRA_CHROMIUM_FLAGS="$EXTRA_CHROMIUM_FLAGS --disable-pinch"
+    if [ "$zoom_percent" != "100" ]; then
+        ZOOM_SCALE_FACTOR=$(awk "BEGIN { printf \"%.2f\", $zoom_percent / 100 }")
+        EXTRA_CHROMIUM_FLAGS="$EXTRA_CHROMIUM_FLAGS --force-device-scale-factor=$ZOOM_SCALE_FACTOR"
+    fi
+
     cat <<EOF >>"$KIOSK_SCRIPT_TMP"
 
 check_network() {
@@ -616,9 +665,9 @@ chromium \
     --disable-features=TranslateUI \
     --overscroll-history-navigation=0 \
     --pull-to-refresh=2 \
+    $EXTRA_CHROMIUM_FLAGS \
     "$KIOSK_URL"
 EOF
-
     chmod +x "$KIOSK_SCRIPT_TMP"
     mv "$KIOSK_SCRIPT_TMP" /usr/local/bin/ha-chromium-kiosk.sh
 
