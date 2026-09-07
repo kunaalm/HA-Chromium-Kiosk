@@ -130,6 +130,10 @@ The script will prompt you for optional settings, such as hiding the mouse curso
 
 See [TESTING.md](TESTING.md) for the full test plan (static analysis, function-level dry runs, generated-artifact verification, and real systemd integration tests) before contributing a change or cutting a release.
 
+### How-To Guide
+
+See [docs/how-to-kiosk-setup.md](docs/how-to-kiosk-setup.md) for a full walkthrough — setting up Home Assistant, installing the kiosk, and validating the connection — with real screenshots and terminal output from an actual end-to-end test run.
+
 ### Author
 **Kunaal Mahanti**
 
