@@ -433,6 +433,11 @@ prompt_user() {
 }
 
 # Check and backup existing configuration files
+# Returns 0 (success) if the caller should proceed to write/overwrite
+# $config_file, or 1 if the user declined and the caller should skip
+# that one step and continue installing everything else (see issue #25 -
+# this used to call `exit 0` on decline, aborting the entire install
+# instead of just skipping the one file in question).
 check_backup_config() {
     local config_file=$1
     local config_desc=$2
@@ -448,10 +453,12 @@ check_backup_config() {
 
         prompt_user overwrite_config "Do you want to overwrite the existing $config_desc configuration? (Y/n)" "Y"
         if [[ ! $overwrite_config =~ ^[Yy]$ ]]; then
-            echo "Installation canceled. Existing $config_desc configuration will not be modified."
-            exit 0
+            echo "Skipping $config_desc configuration - existing file will not be modified."
+            return 1
         fi
     fi
+
+    return 0
 }
 
 # Install the kiosk setup
@@ -473,43 +480,51 @@ install_kiosk() {
     echo "Setting up Chromium Kiosk Mode for Home Assistant URL:$KIOSK_URL"
 
     # Check for existing auto-login configuration
+    write_tty1_config=true
     if [ -f "/etc/systemd/system/getty@tty1.service.d/override.conf" ]; then
-        check_backup_config "/etc/systemd/system/getty@tty1.service.d/override.conf" "auto-login"
+        check_backup_config "/etc/systemd/system/getty@tty1.service.d/override.conf" "auto-login" || write_tty1_config=false
     fi
 
-    # Configure auto login
-    echo "Configuring auto-login for the kiosk user..."
-    mkdir -p /etc/systemd/system/getty@tty1.service.d
-    cat <<EOF >/etc/systemd/system/getty@tty1.service.d/override.conf
+    if [ "$write_tty1_config" = true ]; then
+        # Configure auto login
+        echo "Configuring auto-login for the kiosk user..."
+        mkdir -p /etc/systemd/system/getty@tty1.service.d
+        cat <<EOF >/etc/systemd/system/getty@tty1.service.d/override.conf
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin $KIOSK_USER --noclear %I \$TERM
 Type=idle
 EOF
 
-    systemctl daemon-reload
-    # NOTE: intentionally NOT restarting getty@tty1.service here (see issue #20).
-    # Restarting it mid-install can immediately auto-login as $KIOSK_USER on tty1,
-    # killing the interactive shell running this installer, before the kiosk
-    # systemd service / Openbox config / startup script even exist yet. The
-    # actual kiosk session runs on tty7 via ha-chromium-kiosk.service, not tty1 -
-    # the auto-login override only needs to take effect on the next boot/login,
-    # which the end-of-install reboot prompt already covers.
+        systemctl daemon-reload
+        # NOTE: intentionally NOT restarting getty@tty1.service here (see issue #20).
+        # Restarting it mid-install can immediately auto-login as $KIOSK_USER on tty1,
+        # killing the interactive shell running this installer, before the kiosk
+        # systemd service / Openbox config / startup script even exist yet. The
+        # actual kiosk session runs on tty7 via ha-chromium-kiosk.service, not tty1 -
+        # the auto-login override only needs to take effect on the next boot/login,
+        # which the end-of-install reboot prompt already covers.
+    else
+        echo "Skipping auto-login configuration for $KIOSK_USER as requested."
+    fi
 
     # Configure Openbox
     echo "Configuring Openbox for the kiosk user..."
     sudo -u $KIOSK_USER mkdir -p $OPENBOX_CONFIG_DIR
 
     # Check for existing Openbox configuration
+    write_openbox_autostart=true
     if [ -f "$OPENBOX_CONFIG_DIR/autostart" ]; then
-        check_backup_config "$OPENBOX_CONFIG_DIR/autostart" "Openbox"
+        check_backup_config "$OPENBOX_CONFIG_DIR/autostart" "Openbox" || write_openbox_autostart=false
     fi
 
     # Check for existing kiosk startup script
+    write_kiosk_script=true
     if [ -f "/usr/local/bin/ha-chromium-kiosk.sh" ]; then
-        check_backup_config "/usr/local/bin/ha-chromium-kiosk.sh" "kiosk startup script"
+        check_backup_config "/usr/local/bin/ha-chromium-kiosk.sh" "kiosk startup script" || write_kiosk_script=false
     fi
 
+    if [ "$write_kiosk_script" = true ]; then
     # Create the kiosk startup script
     echo "Creating the kiosk startup script..."
     cat <<EOF >/usr/local/bin/ha-chromium-kiosk.sh
@@ -586,15 +601,24 @@ chromium \
 EOF
 
     chmod +x /usr/local/bin/ha-chromium-kiosk.sh
-
-    echo "Configuring Openbox to start the kiosk script..."
-    echo "/usr/local/bin/ha-chromium-kiosk.sh &" > $OPENBOX_CONFIG_DIR/autostart
-
-    # Check for existing systemd service
-    if [ -f "/etc/systemd/system/ha-chromium-kiosk.service" ]; then
-        check_backup_config "/etc/systemd/system/ha-chromium-kiosk.service" "systemd service"
+    else
+        echo "Skipping kiosk startup script - existing file will not be modified."
     fi
 
+    if [ "$write_openbox_autostart" = true ]; then
+        echo "Configuring Openbox to start the kiosk script..."
+        echo "/usr/local/bin/ha-chromium-kiosk.sh &" > $OPENBOX_CONFIG_DIR/autostart
+    else
+        echo "Skipping Openbox autostart configuration - existing file will not be modified."
+    fi
+
+    # Check for existing systemd service
+    write_systemd_service=true
+    if [ -f "/etc/systemd/system/ha-chromium-kiosk.service" ]; then
+        check_backup_config "/etc/systemd/system/ha-chromium-kiosk.service" "systemd service" || write_systemd_service=false
+    fi
+
+    if [ "$write_systemd_service" = true ]; then
     # Create the systemd service
     echo "Creating the systemd service..."
     cat <<EOF >/etc/systemd/system/ha-chromium-kiosk.service
@@ -621,6 +645,7 @@ TTYVTDisallocate=yes
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
 
     systemctl daemon-reload
     systemctl enable ha-chromium-kiosk.service
