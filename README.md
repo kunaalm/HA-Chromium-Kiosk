@@ -1,143 +1,136 @@
 # HA Chromium Kiosk Setup
 
-This script sets up a light Chromium-based kiosk mode on a Debian server specifically for Home Assistant dashboards, without using a display manager. It configures a touch-friendly kiosk environment and provides options for hiding the mouse pointer.
+[![Lint](https://github.com/kunaalm/HA-Chromium-Kiosk/actions/workflows/lint.yml/badge.svg)](https://github.com/kunaalm/HA-Chromium-Kiosk/actions/workflows/lint.yml)
+[![Latest Release](https://img.shields.io/github/v/release/kunaalm/HA-Chromium-Kiosk)](https://github.com/kunaalm/HA-Chromium-Kiosk/releases/latest)
+[![License](https://img.shields.io/github/license/kunaalm/HA-Chromium-Kiosk)](LICENSE)
 
-## Latest Release
+A one-command setup script for a full-screen Chromium kiosk showing your Home Assistant dashboard — no display manager, touch-friendly, and installable on any Debian-based Linux box (including a Raspberry Pi).
 
-**Current Stable Release**: [v0.10.2](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.2)
+![Real install output](docs/images/install-demo.gif)
 
-We recommend using the latest stable release for the best experience. The release page includes installation instructions and a summary of features.
+## Quick Start
 
-**Release Notes**:
-- v0.10.2: The installer now checks whether the [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) HA plugin is installed when kiosk mode is enabled, and tells you if it's missing (non-blocking) — without it, HA's sidebar/header remain visible even though Chromium's own kiosk flag is active.
-- v0.10.1: Added an upfront check for the `sudo` binary (some minimal Debian images don't ship it by default, causing a confusing failure deep into installation); added a Prerequisites section to this README.
-- v0.10.0: HTTPS support, display rotation, pinch-zoom/scale-factor options, color-coded UI with progress spinners, a working `help` command, an install/uninstall confirmation summary, and a fixed silent bug where the installed kiosk's network-reachability check never actually ran. Full test plan and CI integration tests added. See the [release notes](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.0) for the complete list.
-- v0.9.1: Fixed IP address validation bug that incorrectly rejected valid IP addresses
-- v0.9: ⚠️ DEPRECATED - Contains IP validation bug, please use v0.9.1 or later instead
+```bash
+wget -O ha-chromium-kiosk-setup.sh https://github.com/kunaalm/HA-Chromium-Kiosk/releases/latest/download/ha-chromium-kiosk-setup.sh
+chmod +x ha-chromium-kiosk-setup.sh
+sudo ./ha-chromium-kiosk-setup.sh install
+```
 
-## Repository
+You'll be prompted for your Home Assistant's IP, port, and dashboard path — see [Usage](#usage) below for the full prompt list. New here? Read [Which doc do I need?](#which-doc-do-i-need) first.
 
-GitHub: [https://github.com/kunaalm/ha-chromium-kiosk](https://github.com/kunaalm/ha-chromium-kiosk)
+## Which doc do I need?
 
-## Summary
-
-The `ha-chromium-kiosk-setup.sh` script performs the following tasks:
-- Updates and upgrades the Debian system packages.
-- Creates a dedicated `kiosk` user for the kiosk environment.
-- Installs necessary packages, including X server, Chromium, Openbox, and utilities.
-- Configures auto-login for the `kiosk` user without a display manager.
-- Sets up Openbox to manage the Chromium kiosk session for Home Assistant.
-- Provides an option to hide the mouse cursor on touchscreens.
-- Configures and enables a systemd service to start the kiosk environment on system boot.
-
-This setup is ideal for creating a dedicated, full-screen Home Assistant web kiosk with touch functionality.
+| I want to... | Read |
+|---|---|
+| Install the kiosk right now | This README's [Quick Start](#quick-start) / [Usage](#usage) |
+| See a full walkthrough with real screenshots and terminal output | [docs/how-to-kiosk-setup.md](docs/how-to-kiosk-setup.md) |
+| Check I meet the requirements first | [Prerequisites](#prerequisites) below |
+| Something went wrong | [Troubleshooting / FAQ](#troubleshooting--faq) below |
+| Contribute a change or test one | [CONTRIBUTING.md](CONTRIBUTING.md) + [TESTING.md](TESTING.md) |
+| See what changed between versions | [Releases page](https://github.com/kunaalm/HA-Chromium-Kiosk/releases) |
 
 ## Prerequisites
 
-- **A Debian-based Linux system** (Debian, Raspberry Pi OS, etc.) — the script uses `apt-get` directly and is not tested against other package managers/distros.
-- **Root/sudo access** — the script refuses to run unless invoked as root (`sudo ./ha-chromium-kiosk-setup.sh ...`).
-- **The `sudo` binary itself installed**, even though you invoke the script with `sudo` — the script internally runs a few steps as the `kiosk` user via `sudo -u kiosk ...`. Minimal Debian images (and some containers) don't ship `sudo` by default; install it first if needed: `apt-get update && apt-get install -y sudo`. The script checks for this up front (since v0.10.1) and exits with a clear error if missing, rather than failing deep into the install.
-- **Internet access** for `apt-get update`/`install` — the script installs its own dependencies automatically (`xorg`, `openbox`, `chromium`, `xserver-xorg`, `xinit`, `unclutter`, `curl`, `netcat-openbsd`). Nothing needs to be pre-installed manually beyond `sudo` itself.
-- **A reachable Home Assistant instance** — you'll be prompted for its IP/hostname, port, and dashboard path during installation. No default IP is provided.
-- **No display manager should be running** — the script's whole approach (auto-login + Openbox + a systemd service) is designed to replace one, not coexist with an existing GDM/LightDM/SDDM setup.
-- **(Optional) The [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin installed in Home Assistant** — if you enable "kiosk mode" during installation (recommended, on by default), this script appends `?kiosk=true` to the dashboard URL and uses Chromium's own `--kiosk` flag to hide the *browser's* chrome (address bar, tabs). It **cannot** hide Home Assistant's own in-page sidebar and header — that UI is rendered by HA's frontend JavaScript, not the browser, and Chromium has no way to reach into it. Hiding the sidebar/header requires installing this separate plugin **inside Home Assistant itself** (via HACS, or manually — see the [how-to guide](docs/how-to-kiosk-setup.md#caveat-kiosktrue-doesnt-hide-the-ha-sidebar-by-itself) for both paths). Not required for the kiosk to work — without it you'll still get a full-screen Chromium window, just with HA's sidebar/header visible inside it. The installer checks for it automatically (best-effort, non-blocking — see below) and tells you if it's missing.
+Check these off before running the script:
+
+- [ ] **Debian-based Linux** (Debian, Raspberry Pi OS, etc.) — the script uses `apt-get` directly.
+- [ ] **Root/sudo access** — the script refuses to run unless invoked as root.
+- [ ] **The `sudo` binary itself is installed**, even though you invoke the script with `sudo` (some steps internally run as the `kiosk` user via `sudo -u kiosk ...`). Minimal Debian images often lack it — install first if needed: `apt-get update && apt-get install -y sudo`. The script checks for this and exits with a clear error if it's missing, rather than failing deep into the install.
+- [ ] **No display manager running** (GDM/LightDM/SDDM) — this script replaces one with auto-login + Openbox + a systemd service; it doesn't coexist with an existing one.
+- [ ] **Internet access** for `apt-get` — the script installs its own dependencies (`xorg`, `openbox`, `chromium`, `xinit`, `unclutter`, `curl`, `netcat-openbsd`) automatically.
+- [ ] **A reachable Home Assistant instance** — have its IP/hostname, port, and dashboard path (e.g. `lovelace/default_view`) ready.
+- [ ] *(Optional)* **The [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) HA plugin**, if you want Home Assistant's own sidebar/header hidden too, not just the browser's chrome. See the note in [Features](#features) below — not required for the kiosk to work, and the installer detects and tells you if it's missing.
+
+## Summary
+
+The `ha-chromium-kiosk-setup.sh` script:
+- Updates and upgrades Debian system packages.
+- Creates a dedicated `kiosk` user for the kiosk environment.
+- Installs X server, Chromium, Openbox, and supporting utilities.
+- Configures auto-login for the `kiosk` user without a display manager.
+- Sets up Openbox to run Chromium in full-screen kiosk mode for your Home Assistant dashboard.
+- Optionally hides the mouse cursor for touchscreens.
+- Configures and enables a systemd service so the kiosk starts on boot.
 
 ## Features
 
 - Automatically logs in a `kiosk` user on system boot
-- Configures Openbox to run Chromium in full-screen kiosk mode for Home Assistant
+- Runs Chromium in full-screen kiosk mode for Home Assistant, via Openbox
 - HTTP or HTTPS Home Assistant instances
 - Optional display rotation (normal/left/right/inverted) for Pi + touchscreen setups
 - Optional pinch-to-zoom disable and a configurable default zoom level
 - Optionally hides the mouse pointer
-- Starts and manages the kiosk session using a systemd service
+- Starts and manages the kiosk session via a systemd service
 - Tailored for touchscreen displays with pull-to-refresh support
 - Color-coded, spinner-animated install/uninstall UI with a pre-action summary and confirmation
 - Working `help` command
 
+**On hiding Home Assistant's sidebar/header**: this script's own kiosk mode uses Chromium's `--kiosk` flag, which hides the *browser's* chrome (address bar, tabs) — it cannot reach into Home Assistant's own in-page sidebar/header, which is rendered by HA's frontend JavaScript. Hiding that too requires installing the separate [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin **inside Home Assistant itself** (via HACS, or manually). This is optional — the installer detects it automatically (best-effort, non-blocking) and tells you if it's missing, with both install paths. See the [how-to guide](docs/how-to-kiosk-setup.md#caveat-kiosktrue-doesnt-hide-the-ha-sidebar-by-itself) for details.
+
 ## Usage
 
-1. **Download the script**:
-
-   **Option 1 (Recommended)**: Download from the latest stable release (v0.10.2)
+1. **Download the script** (always resolves to the latest release):
    ```bash
-   wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/v0.10.2/ha-chromium-kiosk-setup.sh
+   wget -O ha-chromium-kiosk-setup.sh https://github.com/kunaalm/HA-Chromium-Kiosk/releases/latest/download/ha-chromium-kiosk-setup.sh
+   ```
+   Or, for the in-development version: `.../raw.githubusercontent.com/kunaalm/HA-Chromium-Kiosk/main/ha-chromium-kiosk-setup.sh`
+
+2. **Verify the download** (recommended, since this script requires sudo). Each [release](https://github.com/kunaalm/HA-Chromium-Kiosk/releases/latest) publishes its exact sha256 checksum in its notes — copy it from there:
+   ```bash
+   echo "<checksum-from-release-notes>  ha-chromium-kiosk-setup.sh" | sha256sum -c -
    ```
 
-   **Verify the download** before running it as root (recommended, since this script requires sudo):
-   ```bash
-   echo "32c1b63a794f5df88bff27cb2f9eda7acc96b2d80be3dc3d198df84970988a98  ha-chromium-kiosk-setup.sh" | sha256sum -c -
-   ```
-   This checksum matches the v0.10.2 tag. If you download a different version, verify against that release's own commit/tag content instead (`git show <tag>:ha-chromium-kiosk-setup.sh | sha256sum`), not this value.
-
-   **Option 2**: Download from the main branch (development version)
-   ```bash
-   wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/main/ha-chromium-kiosk-setup.sh
-   ```
-
-2. **Make the script executable:**
+3. **Make it executable and run it:**
    ```bash
    chmod +x ha-chromium-kiosk-setup.sh
-   ```
-3. **Run the script using** sudo **with** install **or** uninstall **option**:
-   ```bash
    sudo ./ha-chromium-kiosk-setup.sh install
    ```
-   ***To Install:***
-   Installation will prompt you to:
-   * Enter the IP address of your Home Assistant instance (required)
-   * Confirm the port for Home Assistant (defaults to 8123)
-   * Enter the path to your Home Assistant dashboard (defaults to lovelace/default_view)
-   * Choose whether to enable kiosk mode (?kiosk=true will be added to the URL if enabled)
-   * Choose whether to hide the mouse cursor (recommended for touchscreens)
+   You'll be prompted to:
+   - Enter your Home Assistant instance's IP/hostname (required)
+   - Confirm the port (defaults to `8123`)
+   - Enter your dashboard path (defaults to `lovelace/default_view`)
+   - Choose HTTP or HTTPS
+   - Choose whether to enable kiosk mode (`?kiosk=true` appended to the URL)
+   - Choose display rotation, pinch-zoom, and cursor-hiding options
+   - Confirm a summary before anything is changed
 
-   ***To Uninstall:***
+   **To uninstall:**
    ```bash
    sudo ./ha-chromium-kiosk-setup.sh uninstall
    ```
 
-4. **Reboot the System:**
-After the script completes, you will be prompted to reboot. You can either reboot immediately or do so manually later to activate the kiosk environment.
+4. **Reboot** when prompted (or later) to activate the kiosk environment.
 
-### Important Information
+For a full walkthrough with real screenshots and terminal output from an actual run, see [docs/how-to-kiosk-setup.md](docs/how-to-kiosk-setup.md).
 
-**Disclaimer**
-This script is provided “as is,” without warranty of any kind, express or implied. By using this script, you assume all risks. It is intended for educational and personal use only and is not recommended for commercial deployments.
+## Troubleshooting / FAQ
 
-**License**
-This project is licensed under the Apache License, Version 2.0. See the LICENSE file for more details.
+- **The kiosk isn't showing up after reboot** — check the systemd service status:
+  ```bash
+  sudo systemctl status ha-chromium-kiosk.service
+  ```
+- **Chromium shows a "can't reach this page" / connection error** — verify the Home Assistant IP/port you entered is actually reachable from the kiosk machine (`curl http://<ha-ip>:<port>`), and that nothing (firewall, VLAN) blocks it.
+- **The script exits immediately saying it needs to be run as root** — re-run with `sudo ./ha-chromium-kiosk-setup.sh install`.
+- **The script exits saying `sudo` isn't installed** — install it first: `apt-get update && apt-get install -y sudo`, then re-run (see [Prerequisites](#prerequisites)).
+- **Home Assistant's sidebar/header is still visible even with kiosk mode enabled** — this is expected unless you've also installed the separate [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin inside Home Assistant. Chromium's own kiosk flag can't hide HA's in-page UI. See [Features](#features) above.
+- **I need to change a setting after installing** (IP, rotation, zoom, etc.) — re-run `sudo ./ha-chromium-kiosk-setup.sh install` with the new answers; it's safe to run again.
+- **Something else is wrong** — check [existing issues](https://github.com/kunaalm/HA-Chromium-Kiosk/issues) or [open a new one](https://github.com/kunaalm/HA-Chromium-Kiosk/issues/new/choose) with your OS, Home Assistant version, and the exact error output.
 
-**Additional Notes**
-The script will prompt you for optional settings, such as hiding the mouse cursor.
-   * You will be given the option to reboot your system after the setup is complete to activate the kiosk environment.
-   * If you need to make adjustments or customize the script further, feel free to edit the ha-chromium-kiosk.sh file in the repository.
+## Versioning
 
-**Troubleshooting**
-   * Ensure you run the script with sudo since it requires root privileges to modify system settings and configurations.
-   * For any issues with network connectivity, verify that the device is connected to the network and that the specified URL is reachable.
-   * If the kiosk does not start as expected, check the status of the systemd service:
-   ```bash
-   sudo systemctl status ha-chromium-kiosk.service
-   ```
-### Versioning
+Releases follow semantic versioning (MAJOR.MINOR.PATCH). See the [Releases page](https://github.com/kunaalm/HA-Chromium-Kiosk/releases) for the full changelog, checksums, and downloadable assets for every version — each release's notes are generated automatically at tag time so they're always accurate for that exact version.
 
-- **v0.10.2** - Patch release: non-blocking check for the Kiosk Mode HA plugin when kiosk mode is enabled
-- **v0.10.1** - Patch release: added an upfront `sudo`-binary check and a Prerequisites section
-- **v0.10.0** - Feature release: HTTPS support, display rotation, pinch-zoom/scale-factor options, color-coded UI, spinner animations, `help` command, install/uninstall summary+confirmation, and a fix for a silent kiosk network-check bug
-- **v0.9.1** - Bug fix release: Fixed IP address validation
-- **v0.9** - ⚠️ DEPRECATED - Initial release with IP validation bug
-- Releases follow semantic versioning (MAJOR.MINOR.PATCH)
-- For a detailed list of changes in each version, see the [Releases page](https://github.com/kunaalm/ha-chromium-kiosk/releases)
+## Contributing & Testing
 
-### Testing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose a change, and [TESTING.md](TESTING.md) for the full test plan (static analysis, function-level dry runs, generated-artifact verification, and real systemd integration tests) that any change should pass before merge.
 
-See [TESTING.md](TESTING.md) for the full test plan (static analysis, function-level dry runs, generated-artifact verification, and real systemd integration tests) before contributing a change or cutting a release.
+## Important Information
 
-### How-To Guide
+**Disclaimer**: This script is provided "as is," without warranty of any kind, express or implied. By using it you assume all risks. It's intended for educational and personal use, not commercial deployments.
 
-See [docs/how-to-kiosk-setup.md](docs/how-to-kiosk-setup.md) for a full walkthrough — downloading, installing, and validating the kiosk against your existing Home Assistant instance — with real screenshots and terminal output from an actual end-to-end test run.
+**License**: Apache License, Version 2.0 — see [LICENSE](LICENSE).
 
 ### Author
 **Kunaal Mahanti**
 
-If you encounter any problems or have suggestions, feel free to open an issue on the GitHub repository.
+If you encounter any problems or have suggestions, feel free to [open an issue](https://github.com/kunaalm/HA-Chromium-Kiosk/issues/new/choose).

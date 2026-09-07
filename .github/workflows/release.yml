@@ -1,0 +1,73 @@
+name: Release
+
+# Triggered by pushing a version tag (e.g. `git push origin v0.10.3`).
+# Computes the checksum of ha-chromium-kiosk-setup.sh at that tag and
+# publishes a GitHub Release with it baked into the notes automatically -
+# this removes the manual "compute checksum, paste into release notes"
+# step that was previously done by hand for every release and was the
+# single easiest place for a mistake (stale/mismatched checksum).
+#
+# It does NOT touch README.md. The README's download link and checksum
+# use GitHub's "latest release" permalink pattern instead (see README),
+# so they never need editing for a new release - only this workflow
+# needs to run.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify script syntax at this tag
+        run: bash -n ha-chromium-kiosk-setup.sh
+
+      - name: Compute checksum
+        id: checksum
+        run: |
+          SHA=$(sha256sum ha-chromium-kiosk-setup.sh | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Build release notes
+        id: notes
+        run: |
+          {
+            echo "## ha-chromium-kiosk-setup.sh"
+            echo ""
+            echo '```'
+            echo "sha256: ${{ steps.checksum.outputs.sha256 }}"
+            echo '```'
+            echo ""
+            echo "### Verify the download"
+            echo '```bash'
+            echo "echo \"${{ steps.checksum.outputs.sha256 }}  ha-chromium-kiosk-setup.sh\" | sha256sum -c -"
+            echo '```'
+            echo ""
+            echo "### Install"
+            echo '```bash'
+            echo "wget -O ha-chromium-kiosk-setup.sh https://github.com/${{ github.repository }}/releases/latest/download/ha-chromium-kiosk-setup.sh"
+            echo "echo \"${{ steps.checksum.outputs.sha256 }}  ha-chromium-kiosk-setup.sh\" | sha256sum -c -"
+            echo "chmod +x ha-chromium-kiosk-setup.sh"
+            echo "sudo ./ha-chromium-kiosk-setup.sh install"
+            echo '```'
+            echo ""
+            echo "---"
+            echo "_Checksum computed automatically by CI at tag time - see .github/workflows/release.yml._"
+          } > /tmp/release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            ha-chromium-kiosk-setup.sh \
+            --title "Release ${{ github.ref_name }}" \
+            --notes-file /tmp/release-notes.md \
+            --latest

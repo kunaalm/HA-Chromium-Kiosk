@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question / discussion
+    url: https://github.com/kunaalm/HA-Chromium-Kiosk/issues
+    about: For general questions, feel free to open a regular issue.

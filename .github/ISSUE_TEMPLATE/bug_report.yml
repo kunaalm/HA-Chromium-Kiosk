@@ -1,0 +1,64 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: e.g. Debian 12, Raspberry Pi OS Bookworm
+      placeholder: Debian 12 (bookworm)
+    validations:
+      required: true
+
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant version
+      description: Found in Settings > About in Home Assistant
+      placeholder: 2026.6.0
+    validations:
+      required: true
+
+  - type: input
+    id: script-version
+    attributes:
+      label: Script version / commit
+      description: The release tag you downloaded, or the commit hash if using `main`
+      placeholder: v0.10.2
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command you ran
+      render: bash
+      placeholder: sudo ./ha-chromium-kiosk-setup.sh install
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Paste the exact error/output — screenshots are welcome for visual issues (kiosk display problems, etc.)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        If the kiosk installed but isn't behaving right, include:
+        `sudo systemctl status ha-chromium-kiosk.service`
+        `sudo journalctl -u ha-chromium-kiosk.service -n 50`
+      render: shell
