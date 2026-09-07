@@ -4,11 +4,12 @@ This script sets up a light Chromium-based kiosk mode on a Debian server specifi
 
 ## Latest Release
 
-**Current Stable Release**: [v0.10.0](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.0)
+**Current Stable Release**: [v0.10.1](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.1)
 
 We recommend using the latest stable release for the best experience. The release page includes installation instructions and a summary of features.
 
 **Release Notes**:
+- v0.10.1: Added an upfront check for the `sudo` binary (some minimal Debian images don't ship it by default, causing a confusing failure deep into installation); added a Prerequisites section to this README.
 - v0.10.0: HTTPS support, display rotation, pinch-zoom/scale-factor options, color-coded UI with progress spinners, a working `help` command, an install/uninstall confirmation summary, and a fixed silent bug where the installed kiosk's network-reachability check never actually ran. Full test plan and CI integration tests added. See the [release notes](https://github.com/kunaalm/ha-chromium-kiosk/releases/tag/v0.10.0) for the complete list.
 - v0.9.1: Fixed IP address validation bug that incorrectly rejected valid IP addresses
 - v0.9: ⚠️ DEPRECATED - Contains IP validation bug, please use v0.9.1 or later instead
@@ -56,16 +57,16 @@ This setup is ideal for creating a dedicated, full-screen Home Assistant web kio
 
 1. **Download the script**:
 
-   **Option 1 (Recommended)**: Download from the latest stable release (v0.10.0)
+   **Option 1 (Recommended)**: Download from the latest stable release (v0.10.1)
    ```bash
-   wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/v0.10.0/ha-chromium-kiosk-setup.sh
+   wget -O ha-chromium-kiosk-setup.sh https://raw.githubusercontent.com/kunaalm/ha-chromium-kiosk/v0.10.1/ha-chromium-kiosk-setup.sh
    ```
 
    **Verify the download** before running it as root (recommended, since this script requires sudo):
    ```bash
-   echo "c16e022a45cbc751f600f599e0c66f10006271f538f885f6e0d1f7e4a220d913  ha-chromium-kiosk-setup.sh" | sha256sum -c -
+   echo "f461326b6bf6b6042372a01811f14964dc5cc2d8df40efdc7af3730980def763  ha-chromium-kiosk-setup.sh" | sha256sum -c -
    ```
-   This checksum matches the v0.10.0 tag. If you download a different version, verify against that release's own commit/tag content instead (`git show <tag>:ha-chromium-kiosk-setup.sh | sha256sum`), not this value.
+   This checksum matches the v0.10.1 tag. If you download a different version, verify against that release's own commit/tag content instead (`git show <tag>:ha-chromium-kiosk-setup.sh | sha256sum`), not this value.
 
    **Option 2**: Download from the main branch (development version)
    ```bash
@@ -118,6 +119,7 @@ The script will prompt you for optional settings, such as hiding the mouse curso
    ```
 ### Versioning
 
+- **v0.10.1** - Patch release: added an upfront `sudo`-binary check and a Prerequisites section
 - **v0.10.0** - Feature release: HTTPS support, display rotation, pinch-zoom/scale-factor options, color-coded UI, spinner animations, `help` command, install/uninstall summary+confirmation, and a fix for a silent kiosk network-check bug
 - **v0.9.1** - Bug fix release: Fixed IP address validation
 - **v0.9** - ⚠️ DEPRECATED - Initial release with IP validation bug
