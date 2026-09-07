@@ -6,7 +6,13 @@
 
 A one-command setup script for a full-screen Chromium kiosk showing your Home Assistant dashboard — no display manager, touch-friendly, and installable on any Debian-based Linux box (including a Raspberry Pi).
 
+**A real install, against a real Home Assistant instance:**
+
 ![Real install output](docs/images/install-demo.gif)
+
+**Real operations on that same dashboard, once it's up:**
+
+![Real Home Assistant operations - toggling a light, adjusting brightness, changing a thermostat](docs/images/ha-operations-demo.gif)
 
 ## Quick Start
 
@@ -65,7 +71,11 @@ The `ha-chromium-kiosk-setup.sh` script:
 - Color-coded, spinner-animated install/uninstall UI with a pre-action summary and confirmation
 - Working `help` command
 
-**On hiding Home Assistant's sidebar/header**: this script's own kiosk mode uses Chromium's `--kiosk` flag, which hides the *browser's* chrome (address bar, tabs) — it cannot reach into Home Assistant's own in-page sidebar/header, which is rendered by HA's frontend JavaScript. Hiding that too requires installing the separate [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin **inside Home Assistant itself** (via HACS, or manually). This is optional — the installer detects it automatically (best-effort, non-blocking) and tells you if it's missing, with both install paths. See the [how-to guide](docs/how-to-kiosk-setup.md#caveat-kiosktrue-doesnt-hide-the-ha-sidebar-by-itself) for details.
+**On hiding Home Assistant's sidebar/header**: this script's own kiosk mode uses Chromium's `--kiosk` flag, which hides the *browser's* chrome (address bar, tabs) — it cannot reach into Home Assistant's own in-page sidebar/header, which is rendered by HA's frontend JavaScript. Hiding that too requires installing the separate [Kiosk Mode](https://github.com/NemesisRE/kiosk-mode) plugin **inside Home Assistant itself** (via HACS, or manually). This is optional — the installer detects it automatically (best-effort, non-blocking) and tells you if it's missing, with both install paths.
+
+> **Compatibility note (checked 2026-09-07):** as of its latest release (v14.1.0), the Kiosk Mode plugin does not actually hide the sidebar/header on Home Assistant 2026.9.1 in our testing, even when correctly installed and detected. Checking the plugin's own issue tracker shows a recurring pattern — it has broken on nearly every recent HA frontend release (2026.1, .2, .3, .4, .6 all have closed "broken by this HA version" issues) and needs a version-matched patch each time; its last release confirmed working was paired with HA 2026.6.0. If you hit this, check the [plugin's compatibility table](https://github.com/NemesisRE/kiosk-mode#readme) for the version matching your HA release before assuming it's a configuration mistake. This script's own kiosk mode (Chromium's `--kiosk` flag) is unaffected either way.
+
+See the [how-to guide](docs/how-to-kiosk-setup.md#caveat-kiosktrue-doesnt-hide-the-ha-sidebar-by-itself) for full details on both the plugin and this compatibility issue.
 
 ## Usage
 

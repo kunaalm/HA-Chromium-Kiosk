@@ -174,6 +174,18 @@ Once Chromium launches, you should see your dashboard full-screen:
 
 ![Home Assistant dashboard as seen at the kiosk URL](images/how-to/kiosk-url-dashboard.png)
 
+## Real Home Assistant operations
+
+The kiosk just displays whatever's on the dashboard — so to be clear about
+what you'll actually be looking at all day, here's a real dashboard with
+real entities (Home Assistant's own built-in demo integration — lights,
+climate, water heaters, covers) being operated the same way you would on
+the kiosk screen: toggling a light, adjusting brightness, and changing a
+thermostat setpoint. Every state change below is a real, verified HA
+state change, not a mockup:
+
+![Real Home Assistant operations - toggling a light, adjusting brightness, changing a thermostat](images/ha-operations-demo.gif)
+
 ## Caveat: `?kiosk=true` doesn't hide the HA sidebar by itself
 
 Chromium's own `--kiosk` flag (used by this script) hides the *browser's*
@@ -213,6 +225,31 @@ This is entirely optional and does not block this installation - continuing.
 This is entirely optional — the kiosk works fine without it, you just get
 HA's sidebar/header visible inside the full-screen Chromium window rather
 than a fully chrome-free dashboard.
+
+### Compatibility note (checked 2026-09-07)
+
+Even with the plugin correctly installed and detected, we found it did
+**not** actually hide the sidebar/header when tested against Home
+Assistant 2026.9.1 with the plugin's latest release (v14.1.0) — the
+sidebar stayed visible with no JavaScript errors and the plugin's script
+loading successfully (HTTP 200, confirmed via the browser's network
+inspector).
+
+This isn't unique to our setup — the plugin's own GitHub issue tracker
+shows a recurring pattern of breaking on nearly every recent Home
+Assistant frontend release (closed "broken by this HA version" issues
+exist for HA 2026.1, .2, .3, .4, and .6), each requiring a version-matched
+plugin patch before it works again. Its last release confirmed compatible
+by its own maintainers was paired with HA 2026.6.0 — nothing has yet
+confirmed working compatibility with 2026.9.x as of this check.
+
+**If the plugin doesn't hide your sidebar even though it's installed and
+detected:** check the [compatibility table in the plugin's own
+README](https://github.com/NemesisRE/kiosk-mode#readme) for the plugin
+version that matches your Home Assistant version, rather than assuming a
+configuration mistake. This script's own kiosk mode (Chromium's `--kiosk`
+flag, hiding the browser's own chrome) is unaffected by this either way —
+only the HA-side sidebar/header hiding depends on the plugin working.
 
 ## Troubleshooting
 
