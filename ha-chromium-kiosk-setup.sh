@@ -949,6 +949,18 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Check the sudo binary itself is present - install_kiosk()/uninstall_kiosk()
+# call `sudo -u $KIOSK_USER ...` internally to drop privileges for a few
+# steps, even though the script as a whole already runs as root. Minimal
+# Debian images (and some containers) don't ship sudo by default, and a
+# missing binary there previously failed deep into the install with a
+# confusing "command not found" instead of a clear upfront error.
+if ! command -v sudo &> /dev/null; then
+    echo -e "${RED}ERROR: This script requires the 'sudo' command, which is not installed.${NC}"
+    echo "Install it first, e.g.: apt-get update && apt-get install -y sudo"
+    exit 1
+fi
+
 # Handle 'help' before the banner/confirmation prompt - it's a read-only
 # informational command, shouldn't require reading through the warning
 # banner or the interactive [Enter] prompt first.

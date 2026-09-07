@@ -30,6 +30,15 @@ The `ha-chromium-kiosk-setup.sh` script performs the following tasks:
 
 This setup is ideal for creating a dedicated, full-screen Home Assistant web kiosk with touch functionality.
 
+## Prerequisites
+
+- **A Debian-based Linux system** (Debian, Raspberry Pi OS, etc.) — the script uses `apt-get` directly and is not tested against other package managers/distros.
+- **Root/sudo access** — the script refuses to run unless invoked as root (`sudo ./ha-chromium-kiosk-setup.sh ...`).
+- **The `sudo` binary itself installed**, even though you invoke the script with `sudo` — the script internally runs a few steps as the `kiosk` user via `sudo -u kiosk ...`. Minimal Debian images (and some containers) don't ship `sudo` by default; install it first if needed: `apt-get update && apt-get install -y sudo`. The script checks for this up front (since v0.10.1) and exits with a clear error if missing, rather than failing deep into the install.
+- **Internet access** for `apt-get update`/`install` — the script installs its own dependencies automatically (`xorg`, `openbox`, `chromium`, `xserver-xorg`, `xinit`, `unclutter`, `curl`, `netcat-openbsd`). Nothing needs to be pre-installed manually beyond `sudo` itself.
+- **A reachable Home Assistant instance** — you'll be prompted for its IP/hostname, port, and dashboard path during installation. No default IP is provided.
+- **No display manager should be running** — the script's whole approach (auto-login + Openbox + a systemd service) is designed to replace one, not coexist with an existing GDM/LightDM/SDDM setup.
+
 ## Features
 
 - Automatically logs in a `kiosk` user on system boot
